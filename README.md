@@ -8,8 +8,11 @@ A horde-survival roguelite that looks like MS-DOS. You are the blinking cursor, 
 
 ## Play
 
+**[Play in your browser](https://b4help.github.io/dosurvivors/)** (desktop or mobile).
+
 DOSurvivors is a single `index.html` with no build step and no internet connection required.
 
+- **Online:** the link above, hosted on GitHub Pages.
 - **Locally:** download the repo and open `index.html` in a browser.
 - **On a web server:** copy the folder to any static host.
 
