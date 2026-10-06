@@ -310,9 +310,9 @@ function update(dt){
   let mx=0,my=0;
   if(K.w||K.arrowup)my--;if(K.s||K.arrowdown)my++;if(K.a||K.arrowleft)mx--;if(K.d||K.arrowright)mx++;
   if(mx||my){const l=Math.hypot(mx,my);mx/=l;my/=l;PL.fx=mx;PL.fy=my;if(mx)PL.hx=Math.sign(mx)}
-  else if(touch){// finger steers the cursor: player sits at screen center, so move toward the finger
-    const dx=(touch.x-W/2)/ZOOM,dy=(touch.y-H/2)/ZOOM,d=Math.hypot(dx,dy);
-    if(d>4){const k=Math.min(1,(d-4)/14);PL.fx=dx/d;PL.fy=dy/d;mx=PL.fx*k;my=PL.fy*k;if(Math.abs(dx)>1)PL.hx=Math.sign(dx)}}
+  else if(touch){// on-screen stick: knob offset from the stick center sets direction and speed
+    const g=stickGeo(),dx=touch.x-g.x,dy=touch.y-g.y,d=Math.hypot(dx,dy),k=Math.min(1,d/g.R);
+    if(k>.15){const m=Math.min(1,(k-.15)/.6);PL.fx=dx/d;PL.fy=dy/d;mx=PL.fx*m;my=PL.fy*m;if(Math.abs(dx)>2)PL.hx=Math.sign(dx)}}
   const sp=72*P.move*(S.buffs.turbo>0?1.25:1);PL.x+=mx*sp*dt;PL.y+=my*sp*dt;
   for(const k in S.buffs)S.buffs[k]=Math.max(0,S.buffs[k]-dt);
   PL.inv-=dt;PL.hp=Math.min(PL.maxHp,PL.hp+P.regen*dt);
@@ -587,6 +587,7 @@ function render(){
 
   // hurt flash
   if(S.flash>0){ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='rgba(255,255,255,'+Math.min(.6,S.flash*2.4)+')';ctx.fillRect(0,0,cv.width,cv.height)}
+  if(isTouch&&state==='play')drawStick();
   if(S.hurtFlash>0){ctx.setTransform(1,0,0,1,0,0);ctx.strokeStyle='rgba(255,85,85,'+(S.hurtFlash*2.4)+')';ctx.lineWidth=16*DPR;ctx.strokeRect(0,0,cv.width,cv.height)}
 }
 function drawBoss(bs){
@@ -599,6 +600,18 @@ function drawBoss(bs){
     else if(ch==='▲')c=C.dgray;
     if(bs.flash>0)c=C.white;
     txt(ch,x0+i*8+4,y0+j*16+8,c)}}
+}
+
+function drawStick(){
+  const g=stickGeo(),fs=Math.max(12,Math.round(g.R/3.2));
+  ctx.setTransform(DPR,0,0,DPR,0,0);ctx.font=fs+'px VGA';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.globalAlpha=touch?.9:.5;
+  ctx.fillStyle='rgba(0,0,0,.5)';ctx.beginPath();ctx.arc(g.x,g.y,g.R,0,TAU);ctx.fill();
+  ctx.fillStyle=C.dgray;for(let i=0;i<20;i++){const a=i/20*TAU;ctx.fillText('░',g.x+Math.cos(a)*g.R,g.y+Math.sin(a)*g.R)}
+  ctx.fillStyle=C.lgray;const o=g.R*.66;ctx.fillText('\u2191',g.x,g.y-o);ctx.fillText('\u2193',g.x,g.y+o);ctx.fillText('\u2190',g.x-o,g.y);ctx.fillText('\u2192',g.x+o,g.y);
+  let kx=0,ky=0;if(touch){kx=touch.x-g.x;ky=touch.y-g.y;const d=Math.hypot(kx,ky);if(d>g.R){kx*=g.R/d;ky*=g.R/d}}
+  const ks=Math.round(g.R*.42);ctx.fillStyle=touch?C.white:C.lgray;ctx.fillRect(Math.round(g.x+kx-ks/2),Math.round(g.y+ky-ks/2),ks,ks);
+  ctx.globalAlpha=1;
 }
 
 /* ---------- HUD ---------- */
@@ -631,13 +644,26 @@ function updateHud(){
 
 /* ---------- dialogs ---------- */
 let dlg=null;
+// word-wrap a dialog row; continuation lines get a 2-space hanging indent
+function wrap(t,width){
+  if(t.length<=width)return[t];
+  const lead=t.match(/^ */)[0],ind=lead+'  ',toks=t.slice(lead.length).match(/\S+\s*/g)||[],out=[];let cur=lead;
+  for(const tk of toks){if(cur.trim()&&(cur+tk).trimEnd().length>width){out.push(cur.trimEnd());cur=ind+tk}else cur+=tk}
+  out.push(cur.trimEnd());return out.map(l=>l.slice(0,width));
+}
+// phones held upright get a narrower dialog with bigger text
+const narrow=()=>W<600;
+function dlgShow(title,rows,w){
+  const el=$('dlg'),n=narrow();el.className='dlg';el.style.fontSize=n?Math.min(22,W*.94*2/40)+'px':'';
+  el.innerHTML=box(title,rows,n?40:w);$('ov').style.display='flex';
+}
 function box(title,rows,w){
   const inner=w-2,tt=title?' '+title+' ':'',left=Math.floor((inner-tt.length)/2),out=[];
   out.push('╔'+'═'.repeat(left)+`<span class="bt">${esc(tt)}</span>`+'═'.repeat(inner-left-tt.length)+'╗');
   for(const r of rows){
     if(r&&r.sep){out.push('╟'+'─'.repeat(inner)+'╢');continue}
-    const o=typeof r==='string'?{t:r}:r;let t=' '+o.t;t=t.length>inner?t.slice(0,inner):t.padEnd(inner);
-    out.push('║'+`<span class="${o.cls||''}"${o.opt!=null?` data-opt="${o.opt}"`:''}${o.act?` data-act="${o.act}"`:''}>${esc(t)}</span>`+'║');
+    const o=typeof r==='string'?{t:r}:r;
+    for(const t of wrap(' '+o.t,inner))out.push('║'+`<span class="${o.cls||''}"${o.opt!=null?` data-opt="${o.opt}"`:''}${o.act?` data-act="${o.act}"`:''}>${esc(t.padEnd(inner))}</span>`+'║');
   }
   out.push('╚'+'═'.repeat(inner)+'╝');
   return out.join('\n');
@@ -666,10 +692,10 @@ function renderDlg(){
     rows.push({t:`${i+1}  ${f.head.padEnd(11)} ${f.file.padEnd(13)} ${f.tag}`,cls:sel?'sel':'hl',opt:i});
     rows.push({t:`     ${f.desc}`,cls:sel?'sel':'wh',opt:i});rows.push('')});
   rows.push({sep:1});rows.push({t:isTouch?'Tap an option to install':`W/S or 1-${dlg.opts.length} select    ENTER install`,cls:'dim'});
-  $('dlg').className='dlg';$('dlg').innerHTML=box(dlg.title,rows,58);
+  dlgShow(dlg.title,rows,58);
 }
 function openDialog(title,intro,opts,kind){
-  dlg={title,intro,opts,sel:0,kind,armed:false};state=kind;renderDlg();$('ov').style.display='flex';
+  dlg={title,intro,opts,sel:0,kind,armed:false};state=kind;renderDlg();
 }
 function openLevelUp(){arp([523,659,784,1047],.07);openDialog('SETUP.EXE',`Level ${S.level-S.pending+1} reached. Select a component to install:`,choices(3,false),'levelup')}
 function openChest(){const q=S.chestQ[0];arp([392,330,392,523],.08);let o=choices(3,q.own);if(o[0].k==='heal')o=choices(3,false);openDialog(q.title,q.intro,o,'chest')}
@@ -690,7 +716,7 @@ $('dlg').addEventListener('mousemove',e=>{if(!dlg)return;const t=e.target.closes
 $('ov').addEventListener('pointerdown',()=>{if(dlg)dlg.armed=true});
 $('ov').addEventListener('click',e=>{
   const a=e.target.closest('[data-act]'),act=a&&a.dataset.act;
-  if(state==='pause'){if(act==='quit')showTitle();else if(act==='sound'){muted=!muted;lastHud={};openPause()}else resume();return}
+  if(state==='pause'){if(act==='quit')showTitle();else if(act==='sound'){muted=!muted;lastHud={};openPause()}else if(act==='stick'){stickLeft=!stickLeft;try{localStorage.setItem('dosurv.stick',stickLeft?'left':'right')}catch(e){}openPause()}else resume();return}
   if(!dlg||!dlg.armed)return;const t=e.target.closest('[data-opt]');if(t)pickOpt(+t.dataset.opt)});
 
 function openPause(){
@@ -700,13 +726,15 @@ function openPause(){
   for(let i=S.weapons.length;i<6;i++)rows.push({t:'(empty slot)',cls:'dim'});
   rows.push({t:'DRIVERS',cls:'hl'});
   const pk=Object.keys(S.passives);
-  for(const k of pk)rows.push(`[ ${k} ]    ${PASS[k].name.padEnd(12)} ${'█'.repeat(S.passives[k])}${'░'.repeat(PASS[k].max-S.passives[k])}  ${PASS[k].desc}`);
+  for(const k of pk)rows.push(`[ ${k} ]    ${PASS[k].name.padEnd(12)} ${'█'.repeat(S.passives[k])}${'░'.repeat(PASS[k].max-S.passives[k])}`+(narrow()?'':`  ${PASS[k].desc}`));
   for(let i=pk.length;i<6;i++)rows.push({t:'(empty slot)',cls:'dim'});
   rows.push({sep:1});
-  rows.push({t:`DMG x${P.dmg.toFixed(2)}  DELAY x${P.cd.toFixed(2)}  AREA x${P.area.toFixed(2)}  SPD x${P.move.toFixed(2)}`,cls:'cy'});
-  rows.push({t:`AMOUNT +${P.amount}  MAGNET ${Math.round(P.magnet)}  CRIT ${Math.round(P.crit*100)}%  ARMOR ${P.armor}  REGEN ${P.regen.toFixed(1)}/s`,cls:'cy'});
-  rows.push({sep:1});rows.push({t:(isTouch?'TAP':'ESC')+'  Resume',cls:'wh',act:'resume'});rows.push({t:(isTouch?'TAP':'M  ')+'  PC speaker: '+(muted?'OFF':'ON'),cls:'wh',act:'sound'});rows.push({t:(isTouch?'TAP':'Q  ')+'  Quit to DOS',cls:'wh',act:'quit'});
-  $('dlg').className='dlg';$('dlg').innerHTML=box('PAUSE',rows,64);$('ov').style.display='flex';
+  const st=[`DMG x${P.dmg.toFixed(2)}`,`DELAY x${P.cd.toFixed(2)}`,`AREA x${P.area.toFixed(2)}`,`SPD x${P.move.toFixed(2)}`,
+    `AMOUNT +${P.amount}`,`MAGNET ${Math.round(P.magnet)}`,`CRIT ${Math.round(P.crit*100)}%`,`ARMOR ${P.armor}`,`REGEN ${P.regen.toFixed(1)}/s`];
+  const per=narrow()?3:(st.length+1)>>1;
+  for(let i=0;i<st.length;i+=per)rows.push({t:st.slice(i,i+per).map(x=>x.padEnd(narrow()?12:0)).join(narrow()?'':'  '),cls:'cy'});
+  rows.push({sep:1});rows.push({t:(isTouch?'TAP':'ESC')+'  Resume',cls:'wh',act:'resume'});rows.push({t:(isTouch?'TAP':'M  ')+'  PC speaker: '+(muted?'OFF':'ON'),cls:'wh',act:'sound'});if(isTouch)rows.push({t:'TAP  Stick side: '+(stickLeft?'LEFT':'RIGHT'),cls:'wh',act:'stick'});rows.push({t:(isTouch?'TAP':'Q  ')+'  Quit to DOS',cls:'wh',act:'quit'});
+  dlgShow('PAUSE',rows,64);
 }
 function resume(){$('ov').style.display='none';state='play';last=performance.now()}
 
@@ -743,7 +771,7 @@ function showTitle(){
   const key=k=>isTouch?'[TAP]  ':k;
   const menu=[[key('[ENTER]'),'Run program','start'],[key('[H]    '),'Read HELP.TXT','help'],[key('[M]    '),`PC speaker: ${muted?'OFF':'ON '}`,'sound']];
   for(const [k,m,a] of menu){const c=center((k+'  '+m).padEnd(26)),sp=c.length-c.trimStart().length;L.push(' '.repeat(sp)+`<span class="yl" data-act="${a}">${esc(c.trimStart())}</span>`)}
-  if(isTouch)L.push('',`<span class="dim">${esc(center('Touchscreen detected: drag your finger from the cursor to move'))}</span>`);
+  if(isTouch)L.push('',`<span class="dim">${esc(center('Touchscreen detected: use the stick in the bottom corner to move'))}</span>`);
   L.push('','');
   const leg='x 0 E @ # $ & % W   are hostile processes';
   L.push([...center(leg)].map((c,i,a)=>ET[c]&&a[i+1]===' '?`<span style="color:${ET[c].c}">${esc(c)}</span>`:esc(c)).join(''));
@@ -760,8 +788,9 @@ function helpPages(){
   const row=(icon,name,desc,ic)=>'  '+(ic?hc(ic,icon.padEnd(7)):sp('wh',icon.padEnd(7)))+sp('wh',name.padEnd(16))+D(desc);
   const first={};WAVES.forEach((w,i)=>w.t.forEach(c=>{if(!(c in first))first[c]=i}));
   const ctl=isTouch?[
-      row('DRAG','Move','Put your finger on the cursor and drag'),
-      row('TAP','Pause','Tap the top or bottom bar'),
+      row('STICK','Move','drag the stick in the bottom corner'),
+      row('TAP','Pause','tap the top or bottom bar'),
+      row('PAUSE','Stick side','switch it left or right in the pause menu'),
       row('TAP','Choose','Tap an option to install it')]
     :[row('WASD','Move','or the arrow keys'),
       row('ESC','Pause','also P; shows your loadout and stats'),
@@ -902,9 +931,12 @@ $('scr').addEventListener('click',e=>{
 for(const id of['top','bot','xpb'])$(id).addEventListener('click',()=>{if(state==='play')openPause()});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')openPause()});
 
-/* ---------- touch: drag the cursor ---------- */
-let touch=null;
-function tStart(e){e.preventDefault();if(touch)return;const t=e.changedTouches[0];touch={id:t.identifier,x:t.clientX,y:t.clientY}}
+/* ---------- touch: on-screen stick ---------- */
+let touch=null,stickLeft=true;
+try{stickLeft=localStorage.getItem('dosurv.stick')!=='right'}catch(e){}
+function stickGeo(){const R=Math.max(44,Math.min(80,Math.min(W,H)*.16)),bar=16*UI;return{R,x:stickLeft?R+24:W-R-24,y:H-R-24-bar}}
+function tStart(e){e.preventDefault();if(touch)return;const g=stickGeo();
+  for(const t of e.changedTouches)if(Math.hypot(t.clientX-g.x,t.clientY-g.y)<g.R*2){touch={id:t.identifier,x:t.clientX,y:t.clientY};break}}
 function tMove(e){e.preventDefault();if(!touch)return;for(const t of e.changedTouches)if(t.identifier===touch.id){touch.x=t.clientX;touch.y=t.clientY}}
 function tEnd(e){if(!touch)return;for(const t of e.changedTouches)if(t.identifier===touch.id)touch=null}
 cv.addEventListener('touchstart',tStart,{passive:false});

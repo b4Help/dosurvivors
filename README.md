@@ -22,13 +22,13 @@ Keep `Web437_IBM_VGA_8x16.woff` next to `index.html`. Without it the game falls 
 
 | Action | Keyboard | Touchscreen |
 |---|---|---|
-| Move | WASD or arrow keys | Put your finger on the cursor and drag |
+| Move | WASD or arrow keys | On-screen stick in the bottom corner (switch left/right in the pause menu) |
 | Pause (loadout and stats) | ESC or P | Tap the top or bottom bar |
 | Pick an upgrade | 1-3, or W/S then ENTER, or click | Tap an option |
 | Sound on/off | M | From the pause menu |
 | Help | H on the title screen | Tap "Read HELP.TXT" |
 
-The game detects touchscreens on its own and switches the on-screen hints to match.
+The game detects touchscreens on its own, shows the stick and switches the on-screen hints to match. On phones held upright, the level-up and pause boxes use a narrower layout with bigger text.
 
 ## How it plays
 
