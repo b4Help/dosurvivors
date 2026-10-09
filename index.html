@@ -101,6 +101,10 @@ const ET={
   '&':{name:'fork',    c:C.lblue, hp:80, spd:48,dmg:13,xp:4,r:5},
   '%':{name:'overflow',c:C.white, hp:110,spd:40,dmg:15,xp:5,r:6},
   'W':{name:'boot virus',c:C.lmag,hp:200,spd:34,dmg:18,xp:8,r:7},
+  // D:\ drive (LEVEL 2)
+  'q':{name:'trojan',  c:C.brown,hp:40, spd:78,dmg:9, xp:3,r:5},
+  'k':{name:'keylogger',c:C.mag,hp:70, spd:22,dmg:8, xp:4,r:5,shoot:{every:2.4,spd:110,dmg:9}},
+  'Z':{name:'zip bomb',c:C.lblue,hp:120,spd:26,dmg:14,xp:6,r:7,burst:true},
 };
 const WAVES=[
   {t:['x'],rate:1.0,cap:60},
@@ -113,6 +117,19 @@ const WAVES=[
   {t:['&','%','#'],rate:5.3,cap:290},
   {t:['%','W','$'],rate:6.1,cap:330},
   {t:['W','%','&','@'],rate:7.0,cap:380},
+];
+// LEVEL 2 (D:\): same 10-minute shape, new processes mixed in from the first minute
+const WAVES2=[
+  {t:['q','x'],rate:1.4,cap:80},
+  {t:['q','0','x'],rate:2.0,cap:110},
+  {t:['k','E','q'],rate:2.6,cap:140},
+  {t:['Z','#','k'],rate:3.0,cap:170},
+  {t:['q','@','Z'],rate:3.6,cap:200},
+  {t:['k','$','#','q'],rate:4.2,cap:230},
+  {t:['Z','&','k'],rate:4.9,cap:260},
+  {t:['q','%','Z','k'],rate:5.6,cap:300},
+  {t:['k','W','q','Z'],rate:6.4,cap:340},
+  {t:['W','%','q','k','Z'],rate:7.2,cap:380},
 ];
 const MAXW=7;
 const b=(c)=>c?1:0;
@@ -168,6 +185,12 @@ const WEAP={
     st:l=>({dmg:40+20*b(l>=2)+20*b(l>=5)+40*b(l>=7),cd:9*(l>=3?.85:1)*(l>=6?.85:1),rad:130*(1+.25*b(l>=4)+.25*b(l>=7))}),
     fire(w,s){const m=s.rad*P.area;S.rings.push({x:PL.x,y:PL.y,r:0,max:m,spd:m/.6*P.pspd,dmg:s.dmg,hit:new Set()});S.shake=5;beep(90,.5,.05,-60);}},
 };
+// v2 versions (LEVEL 2 only): 1.6x damage, 20% faster, +1 count where it has one.
+// A v2 replaces its base weapon in the same slot (see choices()).
+const baseOf=id=>WEAP[id].base||id;
+for(const id of Object.keys(WEAP)){const b=WEAP[id];
+  WEAP[id+'2']={...b,v2:true,base:id,name:b.name+'2',file:b.file.replace(/\./,'2.'),
+    st:l=>{const s={...b.st(l)};if(s.dmg)s.dmg*=1.6;if(s.cd)s.cd*=.8;if(s.tick)s.tick*=.8;if(s.n)s.n++;return s}}}
 const PASS={
   '!':{name:'EXCLAIM.SYS',desc:'+10% damage',max:5},
   ';':{name:'SEMICOL.SYS',desc:'-8% weapon delay',max:5},
@@ -186,6 +209,17 @@ const PASS={
 /* ---------- state ---------- */
 let state='boot',S=null,PL=null,P=null,T=0,eid=0,frameNo=0;
 const K={};
+// local save: highest unlocked drive, best run per drive
+const SAVE_KEY='dosurv.save';
+let SAVE={unlocked:1,best:{}},selLevel=1;
+try{const s=JSON.parse(localStorage.getItem(SAVE_KEY));if(s&&s.unlocked)SAVE=s}catch(e){}
+const curLv=()=>LEVELS[selLevel-1];
+function writeSave(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE))}catch(e){}}
+function recordRun(won){const id=S.lvl.id,b=SAVE.best[id]||{time:0,kills:0,wins:0};
+  b.time=Math.max(b.time,S.t);b.kills=Math.max(b.kills,S.kills);
+  if(won){b.wins++;if(LEVELS[id])SAVE.unlocked=Math.max(SAVE.unlocked,LEVELS[id].id)}
+  SAVE.best[id]=b;writeSave()}
+function cycleDrive(){const ids=LEVELS.filter(l=>l.id<=SAVE.unlocked).map(l=>l.id);selLevel=ids[(ids.indexOf(selLevel)+1)%ids.length]}
 function xpFor(l){return l<20?5+(l-1)*10:l<40?195+(l-20)*13:455+(l-40)*16}
 function lv(k){return S.passives[k]||0}
 function recalc(){
@@ -193,8 +227,8 @@ function recalc(){
      dur:1+.15*lv("'"),pspd:1.1*(1+.1*lv("'")),crit:.06*lv('?'),regen:.3*lv('~'),armor:lv('`'),growth:1+.1*lv('_')};
   PL.maxHp=100+20*lv('^');PL.hp=Math.min(PL.hp,PL.maxHp);
 }
-function newGame(){
-  S={t:0,kills:0,level:1,xp:0,xpNext:xpFor(1),pending:0,chestQ:[],props:[],chunks:new Set(),bytes:0,buffs:{turbo:0,freeze:0,shield:0},flash:0,seed:(Math.random()*1e6)|0,
+function newGame(L){
+  S={lvl:L,walls:new Map(),t:0,kills:0,level:1,xp:0,xpNext:xpFor(1),pending:0,chestQ:[],props:[],chunks:new Set(),bytes:0,buffs:{turbo:0,freeze:0,shield:0},flash:0,seed:(Math.random()*1e6)|0,
      enemies:[],projs:[],gems:[],picks:[],fx:[],texts:[],eb:[],rings:[],pools:[],lines:[],chains:[],
      weapons:[],passives:{},spawnAcc:0,nextElite:45,events:[150,330,510],boss:null,bossSpawned:false,warned:false,
      banner:null,shake:0,hurtFlash:0,winAt:0};
@@ -220,49 +254,90 @@ function query(x,y,r,fn){
 }
 function nearest(x,y,maxR){let best=null,bd=maxR*maxR;for(const e of S.enemies){if(e.dead)continue;const d=(e.x-x)**2+(e.y-y)**2;if(d<bd){bd=d;best=e}}return best}
 
+/* ---------- walls (LEVEL 2): solid 32px cells that player, enemies and bullets all respect ---------- */
+const wallAt=(x,y)=>S.walls.has(gk(Math.floor(x/32),Math.floor(y/32)));
+// circle of radius r overlapping any wall cell?
+function hitsWall(x,y,r){
+  if(!S.walls.size)return false;
+  for(let cx=Math.floor((x-r)/32);cx<=Math.floor((x+r)/32);cx++)for(let cy=Math.floor((y-r)/32);cy<=Math.floor((y+r)/32);cy++){
+    if(!S.walls.has(gk(cx,cy)))continue;
+    const nx=Math.max(cx*32,Math.min(x,cx*32+32)),ny=Math.max(cy*32,Math.min(y,cy*32+32));
+    if((x-nx)**2+(y-ny)**2<r*r)return true}
+  return false}
+// move by (dx,dy): full step, then rotated probes to get around corners, then axis slides
+function moveBody(o,dx,dy,r){
+  if(!S.walls.size){o.x+=dx;o.y+=dy;return}
+  for(const a of[0,.6,-.6,1.2,-1.2]){const c=Math.cos(a),s=Math.sin(a),ex=dx*c-dy*s,ey=dx*s+dy*c;
+    if(!hitsWall(o.x+ex,o.y+ey,r)){o.x+=ex;o.y+=ey;return}}
+  if(!hitsWall(o.x+dx,o.y,r))o.x+=dx;
+  if(!hitsWall(o.x,o.y+dy,r))o.y+=dy;
+}
+// nearest free point to (x,y), searching outward in a spiral
+function freeSpot(x,y,r){for(let k=0;k<24;k++){const a=k*2.4,d=k*10,nx=x+Math.cos(a)*d,ny=y+Math.sin(a)*d;if(!hitsWall(nx,ny,r))return[nx,ny]}return[x,y]}
+
 /* ---------- spawning ---------- */
-function ringPos(){const a=Math.random()*TAU,r=Math.hypot(VW,VH)/2+20;return[PL.x+Math.cos(a)*r,PL.y+Math.sin(a)*r]}
+function ringPos(){const a=Math.random()*TAU,r=Math.hypot(VW,VH)/2+20;return freeSpot(PL.x+Math.cos(a)*r,PL.y+Math.sin(a)*r,6)}
 function spawnEnemy(ch,o={}){
-  const d=ET[ch];const [x,y]=o.x!=null?[o.x,o.y]:ringPos();const hm=1+S.t/60*.15;
-  const e={id:eid++,ch,x,y,c:d.c,hp:d.hp*hm,spd:d.spd*rand(.9,1.1),dmg:d.dmg,xp:d.xp,r:d.r,kx:0,ky:0,flash:0,hits:{},q:0};
+  const d=ET[ch];const [x,y]=o.x!=null?[o.x,o.y]:ringPos();if(hitsWall(x,y,d.r))return null;const hm=1+S.t/60*.15;
+  const e={id:eid++,ch,x,y,c:d.c,hp:d.hp*hm,spd:d.spd*rand(.9,1.1),dmg:d.dmg,xp:d.xp,r:d.r,kx:0,ky:0,flash:0,hits:{},q:0,burst:!!d.burst,shoot:d.shoot,sct:rand(.5,2)};
   if(o.elite){e.elite=true;e.hp*=14;e.r=d.r*2;e.dmg*=1.6;e.xp*=10;e.spd*=.9}
   e.maxHp=e.hp;S.enemies.push(e);return e;
 }
 function forkBomb(){
   banner('WARNING: FORK BOMB DETECTED',C.lred,3);beep(880,.15,.04);beep(660,.15,.04,0,.18);
   const n=48,r=Math.min(VW,VH)*.55,ch=S.t>400?'@':'x';
-  for(let i=0;i<n;i++){const a=i/n*TAU;const e=spawnEnemy(ch,{x:PL.x+Math.cos(a)*r,y:PL.y+Math.sin(a)*r});e.hp*=1.5;e.maxHp=e.hp}
+  for(let i=0;i<n;i++){const a=i/n*TAU;const e=spawnEnemy(ch,{x:PL.x+Math.cos(a)*r,y:PL.y+Math.sin(a)*r});if(e){e.hp*=1.5;e.maxHp=e.hp}}
 }
 function spawning(dt){
-  if(S.t>=600&&!S.bossSpawned){spawnBoss();return}
+  if(S.t>=S.lvl.dur&&!S.bossSpawned){spawnBoss();return}
   if(S.bossSpawned)return;
-  if(S.t>=588&&!S.warned){S.warned=true;banner('WARNING: FATAL.EXE IS LOADING...',C.lred,6);for(let i=0;i<4;i++)beep(i%2?440:330,.25,.05,0,i*.3)}
-  const wv=WAVES[Math.min(9,Math.floor(S.t/60))];
+  if(S.t>=S.lvl.dur-12&&!S.warned){S.warned=true;banner('WARNING: '+S.lvl.boss+' IS LOADING...',C.lred,6);for(let i=0;i<4;i++)beep(i%2?440:330,.25,.05,0,i*.3)}
+  const wv=S.lvl.waves[Math.min(9,Math.floor(S.t/60))];
   S.spawnAcc+=dt*wv.rate*(1+(S.t%60)/60*.5);
   while(S.spawnAcc>=1){S.spawnAcc--;if(S.enemies.length<wv.cap)spawnEnemy(pick(wv.t))}
   if(S.t>=S.nextElite){S.nextElite+=60;spawnEnemy(pick(wv.t),{elite:true});banner('ELITE PROCESS DETECTED',C.yellow,2.5);beep(220,.3,.04,220)}
   if(S.events.length&&S.t>=S.events[0]){S.events.shift();forkBomb()}
 }
 const BOSS_ART=['╔═════════════╗','║ ▄███▄ ▄███▄ ║','║ █ o █ █ o █ ║','║ ▀███▀ ▀███▀ ║','║      ▲      ║','║ ╔═╦═╦═╦═╦═╗ ║','║ ╚═╩═╩═╩═╩═╝ ║','╚══╦═══════╦══╝','   ║ FAIL? ║   ','   ╚═══════╝   '];
+const artRow=s=>'║'+s.padEnd(13)+'║';
+const BOSS2_ART=['╔'+'═'.repeat(13)+'╗',artRow(' CHKDSK.EXE'),artRow(' ▓▓▓▓▓▓▓▓▓'),artRow(' ▓ ■   ■ ▓'),artRow(' ▓   ▲   ▓'),artRow(' ▓ ═════ ▓'),artRow(' ▓▓▓▓▓▓▓▓▓'),'╚'+'═'.repeat(13)+'╝'];
+const LEVELS=[
+  {id:1,drive:'C:',dir:'\\GAMES',dur:600,boss:'FATAL.EXE',bossHp:30000,bossArt:BOSS_ART,bossV2:false,waves:WAVES,walls:false,v2:false},
+  {id:2,drive:'D:',dir:'\\',dur:600,boss:'CHKDSK.EXE',bossHp:45000,bossArt:BOSS2_ART,bossV2:true,waves:WAVES2,walls:true,v2:true},
+];
 function spawnBoss(){
   S.bossSpawned=true;
   for(const e of S.enemies)if(!e.dead){e.dead=true;S.fx.push({x:e.x,y:e.y,c:e.c,life:.4,max:.4})}
   S.enemies=[];S.eb=[];
-  banner('Terminate batch job (Y/N)? Y',C.white,2.5);
-  const bs={id:eid++,boss:true,ch:'',x:PL.x,y:PL.y-VH*.45,hp:30000,maxHp:30000,r:50,spd:24,dmg:30,xp:0,kx:0,ky:0,flash:0,hits:{},q:0,t1:3,t2:0,t3:6,t4:4.5,spin:0,ph2:false};
+  const L=S.lvl;banner('Terminate batch job (Y/N)? Y',C.white,2.5);
+  const [bx,by]=freeSpot(PL.x,PL.y-VH*.45,24);
+  const bs={id:eid++,boss:true,v2:L.bossV2,name:L.boss,art:L.bossArt,ch:'',x:bx,y:by,hp:L.bossHp,maxHp:L.bossHp,r:50,spd:24,dmg:30,xp:0,kx:0,ky:0,flash:0,hits:{},q:0,t1:3,t2:0,t3:6,t4:4.5,spin:0,ph2:false};
   S.enemies.push(bs);S.boss=bs;
   for(let i=0;i<6;i++)beep(i%2?110:82,.3,.06,0,i*.32);
 }
 function eShoot(x,y,a,spd,ch,c,dmg){S.eb.push({x,y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,ch,c,dmg,life:7})}
 function bossUpdate(bs,dt){
+  if(bs.v2)return bossUpdate2(bs,dt);
   const ph2=bs.hp<bs.maxHp*.5;
-  if(ph2&&!bs.ph2){bs.ph2=true;banner('FATAL.EXE: Abort, Retry, Fail?',C.lred,3);S.shake=8;arp([330,262,196,131],.12,.05)}
+  if(ph2&&!bs.ph2){bs.ph2=true;banner(bs.name+': Abort, Retry, Fail?',C.lred,3);S.shake=8;arp([330,262,196,131],.12,.05)}
   const dx=PL.x-bs.x,dy=PL.y-bs.y,d=Math.hypot(dx,dy)||1,sp=ph2?34:24;
-  bs.x+=dx/d*sp*dt;bs.y+=dy/d*sp*dt;
+  moveBody(bs,dx/d*sp*dt,dy/d*sp*dt,24);
   bs.t1-=dt;if(bs.t1<=0){bs.t1=ph2?2:2.8;const n=ph2?22:16,off=Math.random()*TAU;for(let i=0;i<n;i++)eShoot(bs.x,bs.y,off+i/n*TAU,65,'*',C.lred,12);beep(200,.12,.03,-80)}
   if(ph2){bs.t2-=dt;if(bs.t2<=0){bs.t2=.11;bs.spin+=.32;eShoot(bs.x,bs.y,bs.spin,75,'•',C.yellow,10);eShoot(bs.x,bs.y,bs.spin+Math.PI,75,'•',C.yellow,10)}}
   bs.t4-=dt;if(bs.t4<=0){bs.t4=ph2?2.2:3.5;const a=Math.atan2(dy,dx);for(let k=-2;k<=2;k++)eShoot(bs.x,bs.y,a+k*.12,115,'■',C.lred,14)}
   bs.t3-=dt;if(bs.t3<=0){bs.t3=ph2?5:7;for(let i=0;i<10;i++){const a=i/10*TAU;spawnEnemy(ph2?'%':'E',{x:bs.x+Math.cos(a)*70,y:bs.y+Math.sin(a)*70})}}
+}
+
+// LEVEL 2 boss (CHKDSK.EXE): radial bursts, aimed fans, trojan summons; wall-aware movement
+function bossUpdate2(bs,dt){
+  const ph2=bs.hp<bs.maxHp*.5;
+  if(ph2&&!bs.ph2){bs.ph2=true;banner(bs.name+': CORRUPT SECTOR MAP',C.lred,3);S.shake=8;arp([330,262,196,131],.12,.05)}
+  const dx=PL.x-bs.x,dy=PL.y-bs.y,d=Math.hypot(dx,dy)||1,sp=ph2?30:20;
+  moveBody(bs,dx/d*sp*dt,dy/d*sp*dt,24);
+  bs.t1-=dt;if(bs.t1<=0){bs.t1=ph2?1.6:2.4;const n=ph2?18:12,off=Math.random()*TAU;for(let i=0;i<n;i++)eShoot(bs.x,bs.y,off+i/n*TAU,60,'°',C.lcyan,12);beep(260,.12,.03,-80)}
+  if(ph2){bs.t2-=dt;if(bs.t2<=0){bs.t2=.12;bs.spin+=.4;eShoot(bs.x,bs.y,bs.spin,80,'•',C.yellow,10);eShoot(bs.x,bs.y,bs.spin+Math.PI,80,'•',C.yellow,10)}}
+  bs.t4-=dt;if(bs.t4<=0){bs.t4=ph2?1.5:2.6;const a=Math.atan2(dy,dx);for(let k=-2;k<=2;k++)eShoot(bs.x,bs.y,a+k*.1,130,'■',C.lred,14)}
+  bs.t3-=dt;if(bs.t3<=0){bs.t3=ph2?4:6;for(let i=0;i<4;i++){const a=i/4*TAU+Math.random();spawnEnemy('q',{x:bs.x+Math.cos(a)*80,y:bs.y+Math.sin(a)*80})}}
 }
 
 /* ---------- combat ---------- */
@@ -279,6 +354,7 @@ function kill(e){
   if(e.dead)return;e.dead=true;S.kills++;
   S.fx.push({x:e.x,y:e.y,c:e.c,life:.3,max:.3,big:!!e.elite});
   if(e.boss){bossDead(e);return}
+  if(e.burst)for(let i=0;i<10;i++)eShoot(e.x,e.y,i/10*TAU+.2,70,'*',C.lblue,10);
   dropGem(e.x,e.y,e.xp);
   if(e.elite){S.picks.push({x:e.x,y:e.y,k:'zip'});beep(160,.25,.04,-100)}
   else{const r=Math.random();if(r<.008)S.picks.push({x:e.x,y:e.y,k:'heart'});else if(r<.011)S.picks.push({x:e.x,y:e.y,k:'magnet'});else if(r<.04)S.picks.push({x:e.x,y:e.y,k:'bytes',v:5+((Math.random()*10)|0)})}
@@ -287,7 +363,7 @@ function bossDead(bs){
   for(const e of S.enemies)if(!e.dead){e.dead=true;S.fx.push({x:e.x,y:e.y,c:e.c,life:.4,max:.4})}
   S.eb=[];S.shake=14;
   for(let i=0;i<40;i++)S.fx.push({x:bs.x+rand(-60,60),y:bs.y+rand(-80,80),c:pick([C.lred,C.yellow,C.white]),life:rand(.4,1.4),max:1.4,big:true});
-  banner('FATAL.EXE TERMINATED',C.lgreen,3);arp([131,196,262,330,392,523,659,784],.09,.05);
+  banner(bs.name+' TERMINATED',C.lgreen,3);arp([131,196,262,330,392,523,659,784],.09,.05);
   S.winAt=S.t+3;
 }
 function dropGem(x,y,v){
@@ -313,7 +389,7 @@ function update(dt){
   else if(touch){// on-screen stick: knob offset from the stick center sets direction and speed
     const g=stickGeo(),dx=touch.x-g.x,dy=touch.y-g.y,d=Math.hypot(dx,dy),k=Math.min(1,d/g.R);
     if(k>.15){const m=Math.min(1,(k-.15)/.6);PL.fx=dx/d;PL.fy=dy/d;mx=PL.fx*m;my=PL.fy*m;if(Math.abs(dx)>2)PL.hx=Math.sign(dx)}}
-  const sp=72*P.move*(S.buffs.turbo>0?1.25:1);PL.x+=mx*sp*dt;PL.y+=my*sp*dt;
+  const sp=72*P.move*(S.buffs.turbo>0?1.25:1);moveBody(PL,mx*sp*dt,my*sp*dt,PL.r);
   for(const k in S.buffs)S.buffs[k]=Math.max(0,S.buffs[k]-dt);
   PL.inv-=dt;PL.hp=Math.min(PL.maxHp,PL.hp+P.regen*dt);
   S.shake=Math.max(0,S.shake-dt*20);S.hurtFlash-=dt;S.flash-=dt;
@@ -331,7 +407,7 @@ function update(dt){
         while(da>Math.PI)da-=TAU;while(da<-Math.PI)da+=TAU;const na=ca+Math.max(-7*dt,Math.min(7*dt,da));p.vx=Math.cos(na)*v;p.vy=Math.sin(na)*v}
     }
     p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;
-    if(p.life<=0){p.dead=true;continue}
+    if(p.life<=0||wallAt(p.x,p.y)){p.dead=true;continue}
     query(p.x,p.y,p.r,e=>{if(p.dead||p.hit.has(e))return;p.hit.add(e);const v=Math.hypot(p.vx,p.vy)||1;
       hurt(e,p.dmg,p.vx/v*p.kb,p.vy/v*p.kb);if(p.tgt===e)p.tgt=null;if(--p.pierce<=0)p.dead=true});
   }
@@ -357,10 +433,11 @@ function update(dt){
     else{
       const dx=PL.x-e.x,dy=PL.y-e.y,d=Math.hypot(dx,dy)||1;
       if(d>far&&!e.elite){const [x,y]=ringPos();e.x=x;e.y=y;continue}
-      e.x+=(dx/d*e.spd+e.kx)*dt;e.y+=(dy/d*e.spd+e.ky)*dt;
+      moveBody(e,(dx/d*e.spd+e.kx)*dt,(dy/d*e.spd+e.ky)*dt,e.r);
+      if(e.shoot&&(e.sct-=dt)<=0){e.sct=e.shoot.every;eShoot(e.x,e.y,Math.atan2(dy,dx),e.shoot.spd,'°',C.mag,e.shoot.dmg)}
       const dec=Math.min(1,10*dt);e.kx-=e.kx*dec;e.ky-=e.ky*dec;
       if(((e.id+frameNo)&1)===0)query(e.x,e.y,e.r,o=>{if(o===e||o.boss)return;let sx=e.x-o.x,sy=e.y-o.y,dd=Math.hypot(sx,sy);
-        if(dd<.01){sx=Math.random()-.5;sy=Math.random()-.5;dd=Math.hypot(sx,sy)}const ov=(e.r+o.r-dd)*.5;if(ov>0){e.x+=sx/dd*ov;e.y+=sy/dd*ov}});
+        if(dd<.01){sx=Math.random()-.5;sy=Math.random()-.5;dd=Math.hypot(sx,sy)}const ov=(e.r+o.r-dd)*.5;if(ov>0){const nx=e.x+sx/dd*ov,ny=e.y+sy/dd*ov;if(!hitsWall(nx,ny,e.r)){e.x=nx;e.y=ny}}});
     }
     e.flash-=dt;
     const cx=PL.x-e.x,cy=PL.y-e.y,rr=PL.r+e.r*(e.boss?.85:1);
@@ -369,7 +446,7 @@ function update(dt){
   S.enemies=S.enemies.filter(e=>!e.dead);
 
   // enemy bullets
-  for(const q of S.eb){q.x+=q.vx*dt;q.y+=q.vy*dt;q.life-=dt;
+  for(const q of S.eb){q.x+=q.vx*dt;q.y+=q.vy*dt;q.life-=dt;if(wallAt(q.x,q.y))q.life=0;
     if((q.x-PL.x)**2+(q.y-PL.y)**2<(PL.r+4)**2){hitPlayer(q.dmg);q.life=0}}
   S.eb=S.eb.filter(q=>q.life>0);
 
@@ -406,16 +483,25 @@ const POWK=Object.keys(POW);
 const TREAS=['TREASURE.DAT','LOSTSAVE.GAM','GOLD.BAS','SECRET.TXT','CHEATS.TXT','HISCORE.DAT','LOOT.ARC','BONUS.COM','PAYROLL.WK1','LOVE.LTR'];
 const CH=256;
 function genChunks(){
-  const x0=Math.floor((PL.x-VW)/CH),x1=Math.floor((PL.x+VW)/CH),y0=Math.floor((PL.y-VH)/CH),y1=Math.floor((PL.y+VH)/CH);
+  // 320px margin so walls exist wherever enemies can spawn (ringPos sits just outside the view)
+  const x0=Math.floor((PL.x-VW-320)/CH),x1=Math.floor((PL.x+VW+320)/CH),y0=Math.floor((PL.y-VH-320)/CH),y1=Math.floor((PL.y+VH+320)/CH);
   for(let cx=x0;cx<=x1;cx++)for(let cy=y0;cy<=y1;cy++){const k=gk(cx,cy);if(S.chunks.has(k))continue;S.chunks.add(k);if(cx===0&&cy===0)continue;genChunk(cx,cy)}
 }
 function genChunk(cx,cy){
   const r=i=>hash(cx*7+i*131+S.seed,cy*13-i*71+S.seed*3),at=i=>[cx*CH+24+r(i)*208,cy*CH+24+r(i+50)*208];
+  if(S.lvl.walls){// up to 3 solid blocks on the 32px cell grid, kept inside this chunk (8x8 cells)
+    const wr=i=>hash(cx*11+i*17+S.seed*7,cy*19-i*29+S.seed*5);
+    for(let i=0;i<3;i++){if(wr(60+i*5)>=.6)continue;
+      let w=1+(wr(61+i*5)*4|0),h=1+(wr(62+i*5)*2|0);if(wr(63+i*5)<.5)[w,h]=[h,w];
+      const ox=cx*8+(wr(64+i*5)*(8-w+1)|0),oy=cy*8+(wr(65+i*5)*(8-h+1)|0);
+      for(let dx=0;dx<w;dx++)for(let dy=0;dy<h;dy++)S.walls.set(gk(ox+dx,oy+dy),true)}
+  }
+  // field items never spawn inside a wall
   const n=(r(1)<.3?1:0)+(r(2)<.15?1:0)+(r(3)<.05?1:0);
-  for(let i=0;i<n;i++){const [x,y]=at(10+i);S.props.push({k:'tmp',x,y})}
-  if(r(4)<.065){const [x,y]=at(20);S.props.push({k:'buried',x,y,prog:0,tick:0})}
-  if(r(5)<.025){const [x,y]=at(30);S.picks.push({x,y,k:POWK[(r(31)*POWK.length)|0]})}
-  if(r(6)<.09){const [x,y]=at(40);for(let i=0;i<5;i++)S.picks.push({x:x+Math.cos(i/5*TAU)*10,y:y+Math.sin(i/5*TAU)*10,k:'bytes',v:10})}
+  for(let i=0;i<n;i++){const [x,y]=at(10+i);if(!wallAt(x,y))S.props.push({k:'tmp',x,y})}
+  if(r(4)<.065){const [x,y]=at(20);if(!wallAt(x,y))S.props.push({k:'buried',x,y,prog:0,tick:0})}
+  if(r(5)<.025){const [x,y]=at(30);if(!wallAt(x,y))S.picks.push({x,y,k:POWK[(r(31)*POWK.length)|0]})}
+  if(r(6)<.09){const [x,y]=at(40);for(let i=0;i<5;i++){const px=x+Math.cos(i/5*TAU)*10,py=y+Math.sin(i/5*TAU)*10;if(!wallAt(px,py))S.picks.push({x:px,y:py,k:'bytes',v:10})}}
 }
 function collect(p){
   switch(p.k){
@@ -497,6 +583,10 @@ function render(){
     if(hash(cx+911,cy-37)<.35)ctx.fillText(LIST[Math.floor(hash(cx-5,cy+77)*LIST.length)],cx*256+hash(cx,cy+5)*60,cy*256+8+Math.floor(hash(cy,cx)*14)*16);
   ctx.textAlign='center';
 
+  // walls (LEVEL 2): each 32px cell is a 4x2 block of shade characters
+  if(S.walls.size)for(let gx=Math.floor(camX/32);gx<=Math.floor((camX+VW)/32);gx++)for(let gy=Math.floor(camY/32);gy<=Math.floor((camY+VH)/32);gy++)
+    if(S.walls.has(gk(gx,gy)))for(let i=0;i<4;i++)for(let j=0;j<2;j++)txt('▓',gx*32+4+i*8,gy*32+8+j*16,C.cyan);
+
   // defrag pools
   for(const p of S.pools){ctx.globalAlpha=Math.min(1,p.life/.4)*.85;
     const step=Math.floor(T*6);
@@ -506,7 +596,7 @@ function render(){
   ctx.globalAlpha=1;
 
   // DEL aura
-  const del=S.weapons.find(w=>w.id==='DEL');
+  const del=S.weapons.find(w=>baseOf(w.id)==='DEL');
   if(del&&del.rad){const n=Math.max(10,(TAU*del.rad/10)|0);ctx.fillStyle=C.red;ctx.globalAlpha=.7;
     for(let i=0;i<n;i++){const a=i/n*TAU+T*.6;ctx.fillText('░',PL.x+Math.cos(a)*del.rad,PL.y+Math.sin(a)*del.rad)}ctx.globalAlpha=1}
 
@@ -560,7 +650,7 @@ function render(){
   for(const q of S.eb)txt(q.ch,q.x,q.y,(T%.2<.1)?q.c:C.white);
 
   // COPY orbitals
-  const cp=S.weapons.find(w=>w.id==='COPY');
+  const cp=S.weapons.find(w=>baseOf(w.id)==='COPY');
   if(cp&&cp.orbs)for(const o of cp.orbs)txt(o.ch,o.x,o.y,C.lcyan);
 
   // player: blinking square cursor
@@ -591,8 +681,9 @@ function render(){
   if(S.hurtFlash>0){ctx.setTransform(1,0,0,1,0,0);ctx.strokeStyle='rgba(255,85,85,'+(S.hurtFlash*2.4)+')';ctx.lineWidth=16*DPR;ctx.strokeRect(0,0,cv.width,cv.height)}
 }
 function drawBoss(bs){
-  const x0=bs.x-BOSS_ART[0].length*4,y0=bs.y-BOSS_ART.length*8;
-  for(let j=0;j<BOSS_ART.length;j++){const row=BOSS_ART[j];for(let i=0;i<row.length;i++){const ch=row[i];if(ch===' ')continue;
+  const art=bs.art;
+  const x0=bs.x-art[0].length*4,y0=bs.y-art.length*8;
+  for(let j=0;j<art.length;j++){const row=art[j];for(let i=0;i<row.length;i++){const ch=row[i];if(ch===' ')continue;
     let c=C.lred;
     if(ch==='o')c=bs.ph2&&T%.3<.15?C.lred:C.yellow;
     else if(j===5||j===6)c=C.white;
@@ -626,19 +717,19 @@ function updateHud(){
   const hpc=PL.hp/PL.maxHp<.3?'rd':'wh';
   const left=isTouch&&COLS<80?' HP ':` DOSURV.EXE \u2502 HP `;
   const hp=`${'█'.repeat(hf)}${'░'.repeat(10-hf)}`;
-  const rest=` ${String(Math.ceil(PL.hp)).padStart(3)}/${PL.maxHp} \u2502 TIME ${S.t>=600?'10:00':fmt(S.t)} \u2502 LV ${String(S.level).padStart(2,'0')} \u2502 KILLS ${S.kills} \u2502 BYTES ${S.bytes} `;
+  const rest=` ${String(Math.ceil(PL.hp)).padStart(3)}/${PL.maxHp} \u2502 TIME ${fmt(Math.min(S.t,S.lvl.dur))} \u2502 LV ${String(S.level).padStart(2,'0')} \u2502 KILLS ${S.kills} \u2502 BYTES ${S.bytes} `;
   const used=left.length+10+rest.length;
   setBar('top',esc(left)+`<span class="${hpc}">${hp}</span>`+esc(rest)+' '.repeat(Math.max(0,COLS-used)));
   const lab=` XP [`,endl=`] ${String(Math.floor(S.xp)).padStart(4)}/${S.xpNext} `;
   const bw=Math.max(10,COLS-lab.length-endl.length),xf=Math.min(bw,Math.floor(S.xp/S.xpNext*bw));
   setBar('xpb',`<span class="dim">${esc(lab)}</span><span class="cy">${'█'.repeat(xf)}</span><span class="dg">${'░'.repeat(bw-xf)}</span><span class="dim">${esc(endl)}</span>`);
   if(S.boss){const bw2=Math.max(10,COLS-30),f=Math.max(0,Math.ceil(S.boss.hp/S.boss.maxHp*bw2));
-    setBar('bossb',` FATAL.EXE [<span class="rd">${'█'.repeat(f)}</span><span class="dg">${'░'.repeat(bw2-f)}</span>] ${String(Math.max(0,Math.ceil(S.boss.hp/S.boss.maxHp*100))).padStart(3)}% `)}
+    setBar('bossb',` ${S.lvl.boss} [<span class="rd">${'█'.repeat(f)}</span><span class="dg">${'░'.repeat(bw2-f)}</span>] ${String(Math.max(0,Math.ceil(S.boss.hp/S.boss.maxHp*100))).padStart(3)}% `)}
   const wl=S.weapons.map(w=>w.id+':'+w.lv).join(' ');
   const pl=Object.keys(S.passives).map(k=>k+S.passives[k]).join(' ');
   const r=isTouch?`TAP BAR=Pause `:`ESC=Pause  M=Sound${muted?'(off)':''} `;
   const bfs=Object.keys(S.buffs).filter(k=>S.buffs[k]>0).map(k=>`[${k.toUpperCase()} ${Math.ceil(S.buffs[k])}]`).join('');
-  const l=` ${bfs?bfs+' ':''}C:\\> ${wl}${pl?'  \u2502  '+pl:''}`;
+  const l=` ${bfs?bfs+' ':''}${S.lvl.drive}\\> ${wl}${pl?'  \u2502  '+pl:''}`;
   setBar('bot',esc(pad(l,Math.max(0,COLS-r.length))+r));
 }
 
@@ -670,8 +761,11 @@ function box(title,rows,w){
 }
 function choices(n,ownedOnly){
   const pool=[];
-  for(const id in WEAP){const w=S.weapons.find(w=>w.id===id);
-    if(w){if(w.lv<MAXW)pool.push({k:'w',id,lv:w.lv+1,wt:1.3})}else if(!ownedOnly&&S.weapons.length<6)pool.push({k:'w',id,lv:1,wt:1})}
+  for(const id in WEAP){const d=WEAP[id];if(d.v2&&!S.lvl.v2)continue;const w=S.weapons.find(w=>w.id===id);
+    if(w){if(w.lv<MAXW)pool.push({k:'w',id,lv:w.lv+1,wt:1.3})}
+    else if(d.v2){// a v2 replaces its owned base weapon in the same slot, keeping its level
+      const base=S.weapons.find(x=>x.id===d.base);if(base)pool.push({k:'w',id,lv:base.lv,up:d.base,wt:1.6})}
+    else if(!ownedOnly&&S.weapons.length<6)pool.push({k:'w',id,lv:1,wt:1})}
   const np=Object.keys(S.passives).length;
   for(const id in PASS){const l=lv(id);
     if(l>0){if(l<PASS[id].max)pool.push({k:'p',id,lv:l+1,wt:1.1})}else if(!ownedOnly&&np<6)pool.push({k:'p',id,lv:1,wt:.8})}
@@ -681,8 +775,8 @@ function choices(n,ownedOnly){
   return out;
 }
 function optInfo(o){
-  const tag=o.lv===1?'NEW':`LV ${o.lv-1}>${o.lv}`;
-  if(o.k==='w'){const d=WEAP[o.id];return{head:'C:\\>'+d.name,file:d.file,tag,desc:d.up[o.lv-1]}}
+  const tag=o.up?'UPGRADE':o.lv===1?'NEW':`LV ${o.lv-1}>${o.lv}`;
+  if(o.k==='w'){const d=WEAP[o.id];return{head:S.lvl.drive+'\\>'+d.name,file:d.file,tag,desc:d.up[o.lv-1]}}
   if(o.k==='p'){const d=PASS[o.id];return{head:'[ '+o.id+' ]',file:d.name,tag,desc:d.desc}}
   return{head:'[ ♥ ]',file:'MEM.EXE',tag:'',desc:'Free conventional memory: restore 40 HP'};
 }
@@ -700,7 +794,9 @@ function openDialog(title,intro,opts,kind){
 function openLevelUp(){arp([523,659,784,1047],.07);openDialog('SETUP.EXE',`Level ${S.level-S.pending+1} reached. Select a component to install:`,choices(3,false),'levelup')}
 function openChest(){const q=S.chestQ[0];arp([392,330,392,523],.08);let o=choices(3,q.own);if(o[0].k==='heal')o=choices(3,false);openDialog(q.title,q.intro,o,'chest')}
 function applyChoice(o){
-  if(o.k==='w'){const w=S.weapons.find(w=>w.id===o.id);if(w)w.lv++;else S.weapons.push({id:o.id,lv:1,t:.2});floatTxt('C:\\>'+o.id,C.white)}
+  if(o.k==='w'){if(o.up){const w=S.weapons.find(w=>w.id===o.up);w.id=o.id;w.lv=o.lv}
+    else{const w=S.weapons.find(w=>w.id===o.id);if(w)w.lv++;else S.weapons.push({id:o.id,lv:1,t:.2})}
+    floatTxt(S.lvl.drive+'\\>'+WEAP[o.id].name,C.white)}
   else if(o.k==='p'){S.passives[o.id]=(S.passives[o.id]||0)+1;recalc();if(o.id==='^')PL.hp=Math.min(PL.maxHp,PL.hp+20);floatTxt(o.id,C.yellow)}
   else{PL.hp=Math.min(PL.maxHp,PL.hp+40);floatTxt('+40 HP',C.lred)}
 }
@@ -722,7 +818,7 @@ $('ov').addEventListener('click',e=>{
 function openPause(){
   state='pause';
   const rows=['Program paused. Installed components:','',{sep:1},{t:'WEAPONS',cls:'hl'}];
-  for(const w of S.weapons)rows.push(`C:\\>${w.id.padEnd(8)} ${WEAP[w.id].file.padEnd(12)} ${'█'.repeat(w.lv)}${'░'.repeat(MAXW-w.lv)}`);
+  for(const w of S.weapons)rows.push(`${S.lvl.drive}\\>${w.id.padEnd(8)} ${WEAP[w.id].file.padEnd(12)} ${'█'.repeat(w.lv)}${'░'.repeat(MAXW-w.lv)}`);
   for(let i=S.weapons.length;i<6;i++)rows.push({t:'(empty slot)',cls:'dim'});
   rows.push({t:'DRIVERS',cls:'hl'});
   const pk=Object.keys(S.passives);
@@ -764,20 +860,22 @@ const center=s=>' '.repeat(Math.max(0,Math.floor((SCOLS-1-s.length)/2)))+s;
 function showTitle(){
   state='title';S=null;showBars(false);$('ov').style.display='none';
   const L=[];
-  L.push('C:\\GAMES>DOSURV.EXE','','');
+  L.push(`${curLv().drive}${curLv().dir}>DOSURV.EXE`,'','');
   L.push(logo(),'');
   L.push(`<span class="dim">${esc(center('A Horde Survival Roguelite for MS-DOS        SHAREWARE v1.0'))}</span>`,'','');
-  L.push(`<span class="wh">${esc(center('  You are the cursor. Survive 10:00. Kill FATAL.EXE.   '))}</span>`,'','');
+  L.push(`<span class="wh">${esc(center(`  You are the cursor. Survive ${fmt(curLv().dur)}. Kill ${curLv().boss}.   `))}</span>`,'','');
   const key=k=>isTouch?'[TAP]  ':k;
-  const menu=[[key('[ENTER]'),'Run program','start'],[key('[H]    '),'Read HELP.TXT','help'],[key('[M]    '),`PC speaker: ${muted?'OFF':'ON '}`,'sound']];
+  const menu=[[key('[ENTER]'),'Run program','start'],[key('[D]    '),`Drive: ${curLv().drive}${curLv().dir}`,'drive'],[key('[H]    '),'Read HELP.TXT','help'],[key('[M]    '),`PC speaker: ${muted?'OFF':'ON '}`,'sound']];
   for(const [k,m,a] of menu){const c=center((k+'  '+m).padEnd(26)),sp=c.length-c.trimStart().length;L.push(' '.repeat(sp)+`<span class="yl" data-act="${a}">${esc(c.trimStart())}</span>`)}
+  const bst=SAVE.best[curLv().id];if(bst)L.push(`<span class="dim">${esc(center(`BEST ${fmt(bst.time)}   KILLS ${bst.kills}   WINS ${bst.wins}`))}</span>`);
   if(isTouch)L.push('',`<span class="dim">${esc(center('Touchscreen detected: use the stick in the bottom corner to move'))}</span>`);
   L.push('','');
-  const leg='x 0 E @ # $ & % W   are hostile processes';
+  const leg='x 0 E @ # $ & % W q k Z   are hostile processes';
   L.push([...center(leg)].map((c,i,a)=>ET[c]&&a[i+1]===' '?`<span style="color:${ET[c].c}">${esc(c)}</span>`:esc(c)).join(''));
   L.push(`<span class="cy">${esc(center('+ is XP        ♥ heals        [ZIP] is an archive        Ω pulls all XP'))}</span>`);
   L.push(`<span class="yl">${esc(center('[≡] .TMP files hide loot     ░▒░ buried treasure     ♦ bytes'))}</span>`);
-  L.push('','',`C:\\GAMES><span class="blink">_</span>`);
+  if(curLv().walls)L.push(`<span style="color:${C.cyan}">${esc(center('▓ solid walls: you, enemies and shots cannot pass'))}</span>`);
+  L.push('','',`${curLv().drive}${curLv().dir}><span class="blink">_</span>`);
   showScr(L.join('\n'));
 }
 let helpPage=0;
@@ -801,7 +899,8 @@ function helpPages(){
       H('GOAL'),
       D('  You are the blinking cursor. Processes swarm in from every side.'),
       D('  Your weapons fire on their own. Move, collect XP, get stronger.'),
-      D('  Survive 10:00, then terminate the boss FATAL.EXE to win.'),'',
+      D('  Survive 10:00, then terminate the boss FATAL.EXE to win.'),
+      D('  Beat it to unlock the second drive, D:\\.'),'',
       H('CONTROLS'),...ctl,'',
       H('LEVEL UP'),
       D('  The game pauses and SETUP.EXE offers 3 choices: a new weapon,'),
@@ -811,8 +910,9 @@ function helpPages(){
       D('  Time survived, processes terminated and bytes collected.')]},
     {t:'WEAPONS',l:[
       D('  Weapons are DOS commands and fire automatically.'),
-      D('  You start with DIR. Hold up to 6, each upgrades to level 7.'),'',
-      ...Object.keys(WEAP).map(id=>'  '+sp('wh',('C:\\>'+WEAP[id].name).padEnd(13))+sp('dg',WEAP[id].file.padEnd(12))+D(WEAP[id].up[0]))]},
+      D('  You start with DIR. Hold up to 6, each upgrades to level 7.'),
+      D('  On D:\\ each also has a stronger v2 version (see D:\\ DRIVE).'),'',
+      ...Object.keys(WEAP).filter(id=>!WEAP[id].v2).map(id=>'  '+sp('wh',('C:\\>'+WEAP[id].name).padEnd(13))+sp('dg',WEAP[id].file.padEnd(12))+D(WEAP[id].up[0]))]},
     {t:'DRIVERS',l:[
       D('  Drivers are punctuation upgrades that boost everything.'),
       D('  Hold up to 6. Each goes to level 5 (COLON.SYS: level 2).'),
@@ -838,12 +938,30 @@ function helpPages(){
       row('◘','WRITE PROTECT','6s: you take no damage',C.lcyan)]},
     {t:'ENEMIES',l:[
       D('  Hostile processes. They get tougher every minute.'),'',
-      ...Object.keys(ET).sort((a,b)=>first[a]-first[b]).map(c=>row(c,ET[c].name,'appears at '+first[c]+':00',ET[c].c)),'',
+      ...Object.keys(ET).filter(c=>c in first).sort((a,b)=>first[a]-first[b]).map(c=>row(c,ET[c].name,'appears at '+first[c]+':00',ET[c].c)),'',
       H('EVENTS'),
       row('ELITE','0:45 + each min','big blinking enemy, drops a [ZIP]'),
       row('FORK','2:30 5:30 8:30','a ring of enemies closes in'),
       row('10:00','FATAL.EXE','the boss. Below half HP it gets angry'),'',
       sp('dg','  Font: Px437 IBM VGA 8x16 by VileR (int10h.org), CC BY-SA 4.0')]},
+    {t:'D:\\ DRIVE',l:[
+      H('UNLOCK'),
+      D('  Beat FATAL.EXE on C:\\GAMES to unlock D:\\. Press D on the'),
+      D('  title screen to switch drives.'),'',
+      H('THE SAME RUN, WITH CHANGES'),
+      D('  Walls are solid. You, enemies and bullets cannot cross them.'),
+      D('  Walls are random every run.'),'',
+      H('NEW PROCESSES'),
+      row('q','trojan','fast, chases you hard',C.brown),
+      row('k','keylogger','fires aimed shots every few seconds',C.mag),
+      row('Z','zip bomb','tanky; bursts into bullets when killed',C.lblue),'',
+      H('BOSS'),
+      D('  CHKDSK.EXE, 45000 HP. Bursts, aimed fans and trojan summons.'),
+      D('  Below half HP it speeds up and adds a spiral.'),'',
+      H('V2 WEAPONS'),
+      D('  DIR2, TYPE2, COPY2, DEL2, PING2, TREE2, DEFRAG2, FORMAT2.'),
+      D('  A v2 is offered as UPGRADE. It replaces its base weapon in the'),
+      D('  same slot, keeps the level, and does 1.6x damage, 20% faster.')]},
   ];
 }
 function showHelp(page){
@@ -864,22 +982,24 @@ function helpKey(k){
   if(helpPage>=helpPages().length-1){helpPage=0;showTitle()}else showHelp(helpPage+1);
 }
 function showDead(){
-  state='dead';showBars(false);
-  const L=['C:\\GAMES>DOSURV.EXE','','',`<span class="wh">General failure reading drive C:</span>`,`<span class="wh">Abort, Retry, Fail?</span><span class="blink">_</span>`,'','',
+  state='dead';showBars(false);recordRun(false);
+  const L=[`${S.lvl.drive}${S.lvl.dir}>DOSURV.EXE`,'','',`<span class="wh">General failure reading drive ${S.lvl.drive}</span>`,`<span class="wh">Abort, Retry, Fail?</span><span class="blink">_</span>`,'','',
     `  Uptime     ${fmt(S.t)}`,`  Level      ${S.level}`,`  Processes  ${S.kills} terminated`,`  Bytes      ${S.bytes} recovered`,`  Weapons    ${S.weapons.map(w=>w.id+' '+w.lv).join(', ')}`,'','',
     `  <span class="yl" data-act="retry">[R] Retry</span>      <span class="yl" data-act="abort">[A] Abort</span>      <span class="yl" data-act="abort">[F] Fail</span>`];
   showScr(L.join('\n'));arp([392,330,262,196,131],.14,.05);
 }
 function showWin(){
   state='win';showBars(false);
-  const L=['C:\\GAMES>DOSURV.EXE','',`<span class="gr">FATAL.EXE terminated normally.</span>`,'',
-    `<span class="wh">You survived 10:00 and cleared the system.</span>`,'',
+  const nx=LEVELS[S.lvl.id],fresh=!!nx&&SAVE.unlocked<nx.id;recordRun(true);
+  const L=[`${S.lvl.drive}${S.lvl.dir}>DOSURV.EXE`,'',`<span class="gr">${S.lvl.boss} terminated normally.</span>`,'',
+    `<span class="wh">You survived ${fmt(S.lvl.dur)} and cleared the system.</span>`,'',
+    fresh?`<span class="cy">NEW DRIVE UNLOCKED: ${nx.drive}${nx.dir}  (press D on the title screen)</span>`:'',
     `  Level      ${S.level}`,`  Processes  ${S.kills} terminated`,`  Bytes      ${S.bytes} recovered`,`  Total time ${fmt(S.t)}`,`  Weapons    ${S.weapons.map(w=>w.id+' '+w.lv).join(', ')}`,'',
     '  Thank you for playing DOSURVIVORS.','  This is shareware. Please copy it for your friends.','','',
-    `C:\\GAMES>EXIT`,'',`<span class="yl">${isTouch?'Tap to continue':'Press ENTER'}</span><span class="blink">_</span>`];
+    `${S.lvl.drive}${S.lvl.dir}>EXIT`,'',`<span class="yl">${isTouch?'Tap to continue':'Press ENTER'}</span><span class="blink">_</span>`];
   showScr(L.join('\n'));
 }
-function startGame(){touch=null;newGame();hideScr();$('ov').style.display='none';state='play';last=performance.now()}
+function startGame(){touch=null;newGame(curLv());hideScr();$('ov').style.display='none';state='play';last=performance.now()}
 
 /* ---------- boot ---------- */
 let bootTimers=[],bootText='';
@@ -904,7 +1024,7 @@ addEventListener('keydown',e=>{
   if(k==='m'){muted=!muted;lastHud={};if(state==='title'){showTitle();return}}
   switch(state){
     case'boot':skipBoot();break;
-    case'title':if(k==='enter'||k===' ')startGame();else if(k==='h')showHelp(0);break;
+    case'title':if(k==='enter'||k===' ')startGame();else if(k==='h')showHelp(0);else if(k==='d'){cycleDrive();showTitle()}break;
     case'help':helpKey(k);break;
     case'play':if(k==='escape'||k==='p')openPause();break;
     case'pause':if(k==='escape'||k==='p'||k==='enter')resume();else if(k==='q')showTitle();break;
@@ -923,7 +1043,7 @@ addEventListener('blur',()=>{for(const k in K)K[k]=false;if(state==='play')openP
 $('scr').addEventListener('click',e=>{
   const a=e.target.closest('[data-act]'),act=a&&a.dataset.act;
   if(state==='boot')skipBoot();
-  else if(state==='title'){if(act==='help')showHelp(0);else if(act==='sound'){muted=!muted;showTitle()}else startGame()}
+  else if(state==='title'){if(act==='help')showHelp(0);else if(act==='sound'){muted=!muted;showTitle()}else if(act==='drive'){cycleDrive();showTitle()}else startGame()}
   else if(state==='help')helpKey('next');
   else if(state==='dead'){if(act==='retry')startGame();else if(act==='abort')showTitle()}
   else if(state==='win')showTitle();

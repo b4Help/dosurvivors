@@ -1,6 +1,6 @@
 # DOSurvivors
 
-A horde-survival roguelite that looks like MS-DOS. You are the blinking cursor, enemies are ASCII characters, your weapons are DOS commands and your upgrades are punctuation. Survive 10 minutes, then terminate the boss.
+A horde-survival roguelite that looks like MS-DOS. You are the blinking cursor, enemies are ASCII characters, your weapons are DOS commands and your upgrades are punctuation. Survive 10 minutes, then terminate the boss. Beat it to unlock the second drive, `D:\`.
 
 > **Proof of concept.** DOSurvivors is a test project, not a finished game. Balance, features and content may change or stay rough, and bugs are expected.
 
@@ -26,6 +26,7 @@ Keep `Web437_IBM_VGA_8x16.woff` next to `index.html`. Without it the game falls 
 | Pause (loadout and stats) | ESC or P | Tap the top or bottom bar |
 | Pick an upgrade | 1-3, or W/S then ENTER, or click | Tap an option |
 | Sound on/off | M | From the pause menu |
+| Pick drive (after unlocking) | D on the title screen | Tap the Drive line |
 | Help | H on the title screen | Tap "Read HELP.TXT" |
 
 The game detects touchscreens on its own, shows the stick and switches the on-screen hints to match. On phones held upright, the level-up and pause boxes use a narrower layout with bigger text.
@@ -35,6 +36,17 @@ The game detects touchscreens on its own, shows the stick and switches the on-sc
 Enemies swarm in from every side and your weapons fire on their own. Kills drop XP (`+`). Each level pauses the game and **SETUP.EXE** offers three choices: a new weapon, a weapon level or a driver. Every minute gets harder, with elites, fork bombs and tougher enemy types. At 10:00 every enemy is terminated and **FATAL.EXE** loads. Kill it to win.
 
 ![Gameplay](images/gameplay1.png)
+
+## Drives
+
+DOSurvivors has two drives. **`C:\GAMES`** is the first run: survive 10 minutes and terminate **FATAL.EXE**. Beating it unlocks **`D:\`**, which is the same 10-minute run with these changes:
+
+- **Walls.** Solid blocks scattered across the field. You, enemies and bullets can't cross them, and your shots stop at them. Walls are random every run.
+- **New processes.** Trojan, keylogger and zip bomb (see below).
+- **A new boss.** **CHKDSK.EXE**, with 45000 HP.
+- **v2 weapons.** Every weapon has a stronger v2 version (DIR2, TYPE2, COPY2, DEL2, PING2, TREE2, DEFRAG2, FORMAT2). A v2 is offered as an upgrade. It replaces its base weapon in the same slot and keeps the level, with 1.6x damage and 20% faster firing.
+
+Progress is saved in your browser's localStorage: the highest unlocked drive and your best run on each. Press **D** on the title screen to switch drives. The save belongs to one browser and one address, so a copy of the game at a different address starts with a fresh save.
 
 ### Weapons
 
@@ -117,6 +129,16 @@ When everything is maxed out, level-ups offer **MEM.EXE** instead, which restore
 - **FATAL.EXE** loads at 10:00. Below half HP it adds a bullet spiral and spawns tougher minions.
 
 ![FATAL.EXE boss fight](images/boss.png)
+
+### D:\ enemies and boss
+
+| Enemy | Name | Notes |
+|---|---|---|
+| `q` | trojan | Fast, chases you hard |
+| `k` | keylogger | Fires aimed shots every few seconds |
+| `Z` | zip bomb | Tanky. Bursts into a ring of bullets when killed |
+
+- **CHKDSK.EXE** loads at 10:00 on `D:\`. Fires radial bursts and aimed fans, and summons trojans. Below half HP it speeds up and adds a spiral.
 
 Lose and you get `General failure reading drive C: Abort, Retry, Fail?`. Win and FATAL.EXE terminates normally.
 
