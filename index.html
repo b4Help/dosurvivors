@@ -42,7 +42,7 @@ body{font-family:VGA,'Courier New',monospace;font-size:var(--fs);line-height:1;c
 <div id="scr" class="scr"></div>
 <div id="ov"><div id="dlg" class="dlg"></div></div>
 <div id="crt"></div>
-<div id="ver">v0.2</div>
+<div id="ver">v0.3</div>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -219,7 +219,10 @@ const curLv=()=>LEVELS[selLevel-1];
 function writeSave(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE))}catch(e){}}
 function recordRun(won){const id=S.lvl.id,b=SAVE.best[id]||{time:0,kills:0,wins:0};
   b.time=Math.max(b.time,S.t);b.kills=Math.max(b.kills,S.kills);
-  if(won){b.wins++;if(LEVELS[id])SAVE.unlocked=Math.max(SAVE.unlocked,LEVELS[id].id)}
+  if(won){b.wins++;
+    // beating a drive carries weapons and drivers into the next one (timed power-ups don't carry)
+    if(LEVELS[id]){SAVE.unlocked=Math.max(SAVE.unlocked,LEVELS[id].id);SAVE.carry={weapons:S.weapons.map(w=>({id:w.id,lv:w.lv})),passives:{...S.passives}}}
+    else SAVE.carry=null}
   SAVE.best[id]=b;writeSave()}
 function cycleDrive(){const ids=LEVELS.filter(l=>l.id<=SAVE.unlocked).map(l=>l.id);selLevel=ids[(ids.indexOf(selLevel)+1)%ids.length]}
 function xpFor(l){return l<20?5+(l-1)*10:l<40?195+(l-20)*13:455+(l-40)*16}
@@ -235,8 +238,9 @@ function newGame(L){
      weapons:[],passives:{},spawnAcc:0,nextElite:45,events:[150,330,510],boss:null,bossSpawned:false,warned:false,
      banner:null,shake:0,hurtFlash:0,winAt:0};
   PL={x:0,y:0,hp:100,maxHp:100,r:5,fx:1,fy:0,hx:1,inv:0};
-  recalc();
-  S.weapons.push({id:'DIR',lv:1,t:.5});
+  const C=L.id>1?SAVE.carry:null;// carried loadout from the drive before
+  if(C){S.passives={...C.passives};recalc();PL.hp=PL.maxHp;S.weapons=C.weapons.map(w=>({id:w.id,lv:w.lv,t:.5}))}
+  else{recalc();S.weapons.push({id:'DIR',lv:1,t:.5})}
 }
 function banner(s,c,d=2.5){S.banner={s,c,life:d,max:d}}
 
@@ -869,6 +873,8 @@ function showTitle(){
   const key=k=>isTouch?'[TAP]  ':k;
   const menu=[[key('[ENTER]'),'Run program','start'],[key('[D]    '),`Drive: ${curLv().drive}${curLv().dir}`,'drive'],[key('[H]    '),'Read HELP.TXT','help'],[key('[M]    '),`PC speaker: ${muted?'OFF':'ON '}`,'sound']];
   for(const [k,m,a] of menu){const c=center((k+'  '+m).padEnd(26)),sp=c.length-c.trimStart().length;L.push(' '.repeat(sp)+`<span class="yl" data-act="${a}">${esc(c.trimStart())}</span>`)}
+  if(curLv().id>1&&SAVE.carry){const cw=SAVE.carry.weapons.map(w=>w.id+':'+w.lv).join(' '),cp=Object.keys(SAVE.carry.passives).map(k=>k+SAVE.carry.passives[k]).join(' ');
+    L.push(`<span class="cy">${esc(center('CARRIED FROM C:\\GAMES: '+cw+(cp?'  '+cp:'')))}</span>`)}
   const bst=SAVE.best[curLv().id];if(bst)L.push(`<span class="dim">${esc(center(`BEST ${fmt(bst.time)}   KILLS ${bst.kills}   WINS ${bst.wins}`))}</span>`);
   if(isTouch)L.push('',`<span class="dim">${esc(center('Touchscreen detected: use the stick in the bottom corner to move'))}</span>`);
   L.push('','');
@@ -949,7 +955,8 @@ function helpPages(){
     {t:'D:\\ DRIVE',l:[
       H('UNLOCK'),
       D('  Beat FATAL.EXE on C:\\GAMES to unlock D:\\. Press D on the'),
-      D('  title screen to switch drives.'),'',
+      D('  title screen to switch drives.'),
+      D('  Your weapons and drivers carry over (power-ups do not).'),'',
       H('THE SAME RUN, WITH CHANGES'),
       D('  Walls are solid. You, enemies and bullets cannot cross them.'),
       D('  Walls are random every run.'),'',
@@ -995,7 +1002,7 @@ function showWin(){
   const nx=LEVELS[S.lvl.id],fresh=!!nx&&SAVE.unlocked<nx.id;recordRun(true);
   const L=[`${S.lvl.drive}${S.lvl.dir}>DOSURV.EXE`,'',`<span class="gr">${S.lvl.boss} terminated normally.</span>`,'',
     `<span class="wh">You survived ${fmt(S.lvl.dur)} and cleared the system.</span>`,'',
-    fresh?`<span class="cy">NEW DRIVE UNLOCKED: ${nx.drive}${nx.dir}  (press D on the title screen)</span>`:'',
+    fresh?`<span class="cy">NEW DRIVE UNLOCKED: ${nx.drive}${nx.dir}  (your weapons and drivers carry over; press D on the title screen)</span>`:'',
     `  Level      ${S.level}`,`  Processes  ${S.kills} terminated`,`  Bytes      ${S.bytes} recovered`,`  Total time ${fmt(S.t)}`,`  Weapons    ${S.weapons.map(w=>w.id+' '+w.lv).join(', ')}`,'',
     '  Thank you for playing DOSURVIVORS.','  This is shareware. Please copy it for your friends.','','',
     `${S.lvl.drive}${S.lvl.dir}>EXIT`,'',`<span class="yl">${isTouch?'Tap to continue':'Press ENTER'}</span><span class="blink">_</span>`];

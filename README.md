@@ -46,7 +46,7 @@ DOSurvivors has two drives. **`C:\GAMES`** is the first run: survive 10 minutes 
 - **A new boss.** **CHKDSK.EXE**, with 45000 HP.
 - **v2 weapons.** Every weapon has a stronger v2 version (DIR2, TYPE2, COPY2, DEL2, PING2, TREE2, DEFRAG2, FORMAT2). A v2 is offered as an upgrade. It replaces its base weapon in the same slot and keeps the level, with 1.6x damage and 20% faster firing.
 
-Progress is saved in your browser's localStorage: the highest unlocked drive and your best run on each. Press **D** on the title screen to switch drives. The save belongs to one browser and one address, so a copy of the game at a different address starts with a fresh save.
+Your weapons and drivers carry over from the C:\GAMES run into your first D:\ run. Timed power-ups don't. Progress is saved in your browser's localStorage: the highest unlocked drive and your best run on each. Press **D** on the title screen to switch drives. The save belongs to one browser and one address, so a copy of the game at a different address starts with a fresh save.
 
 ### Weapons
 
