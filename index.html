@@ -1066,7 +1066,8 @@ cv.addEventListener('touchend',tEnd);cv.addEventListener('touchcancel',tEnd);
 /* ---------- loop ---------- */
 let last=performance.now();
 function frame(now){
-  const dt=Math.min(.05,(now-last)/1000);last=now;T+=dt;
+  // clamp at 0: the rAF timestamp can predate startGame's last=performance.now(), which made dt negative
+  const dt=Math.max(0,Math.min(.05,(now-last)/1000));last=now;T+=dt;
   if(state==='play')update(dt);
   if(S&&['play','levelup','chest','pause'].includes(state))render();
   else if(state!=='dead'&&state!=='win'){ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#000';ctx.fillRect(0,0,cv.width,cv.height)}
