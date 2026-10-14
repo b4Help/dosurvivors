@@ -1,6 +1,6 @@
 # DOSurvivors
 
-A horde-survival roguelite that looks like MS-DOS. You are the blinking cursor, enemies are ASCII characters, your weapons are DOS commands and your upgrades are punctuation. Survive 10 minutes, then terminate the boss. Beat it to unlock the second drive, `D:\`.
+A horde-survival roguelite that looks like MS-DOS. You are the blinking cursor, enemies are ASCII characters, your weapons are DOS commands and your upgrades are punctuation. Survive 10 minutes, then terminate the boss. Beat it and the run continues on the second drive, `D:\`.
 
 > **Proof of concept.** DOSurvivors is a test project, not a finished game. Balance, features and content may change or stay rough, and bugs are expected.
 
@@ -26,7 +26,6 @@ Keep `Web437_IBM_VGA_8x16.woff` next to `index.html`. Without it the game falls 
 | Pause (loadout and stats) | ESC or P | Tap the top or bottom bar |
 | Pick an upgrade | 1-3, or W/S then ENTER, or click | Tap an option |
 | Sound on/off | M | From the pause menu |
-| Pick drive (after unlocking) | D on the title screen | Tap the Drive line |
 | Help | H on the title screen | Tap "Read HELP.TXT" |
 
 The game detects touchscreens on its own, shows the stick and switches the on-screen hints to match. On phones held upright, the level-up and pause boxes use a narrower layout with bigger text.
@@ -39,14 +38,25 @@ Enemies swarm in from every side and your weapons fire on their own. Kills drop 
 
 ## Drives
 
-DOSurvivors has two drives. **`C:\GAMES`** is the first run: survive 10 minutes and terminate **FATAL.EXE**. Beating it unlocks **`D:\`**, which is the same 10-minute run with these changes:
+DOSurvivors has two drives, played in order as one run. Every run starts on **`C:\GAMES`**: survive 10 minutes and terminate **FATAL.EXE**. Beat it and the run continues on **`D:\`**, which is the same 10-minute shape with these changes:
 
-- **Walls.** Solid blocks scattered across the field. You, enemies and bullets can't cross them, and your shots stop at them. Walls are random every run.
+- **Walls.** Small solid blocks scattered across the field, at most one per area and never joined into corridors. You, enemies and bullets can't cross them, and your shots stop at them. Walls are random every run.
 - **New processes.** Trojan, keylogger and zip bomb (see below).
 - **A new boss.** **CHKDSK.EXE**, with 45000 HP.
-- **v2 weapons.** Every weapon has a stronger v2 version (DIR2, TYPE2, COPY2, DEL2, PING2, TREE2, DEFRAG2, FORMAT2). A v2 is offered as an upgrade. It replaces its base weapon in the same slot and keeps the level, with 1.6x damage and 20% faster firing.
+- **v2 weapons.** Once a weapon is maxed (level 7, on C:\ or during D:\), its v2 is offered as an upgrade. The v2 replaces the base weapon in the same slot, starts again at level 1 with the base weapon's max stats, and levels up to 7. Each v2 adds its own effect that grows at levels 2, 5 and 7:
 
-Your weapons and drivers carry over from the C:\GAMES run into your first D:\ run. Timed power-ups don't. Progress is saved in your browser's localStorage: the highest unlocked drive and your best run on each. Press **D** on the title screen to switch drives. The save belongs to one browser and one address, so a copy of the game at a different address starts with a fresh save.
+| v2 | Effect |
+|---|---|
+| DIR2 | Listings split into subdirectory shards on impact (more shards as it levels) |
+| TYPE2 | Printed text burns in and keeps hurting anything standing on it (longer burn) |
+| COPY2 | Orbiting files launch copies of themselves outward (faster launches) |
+| DEL2 | Processes deleted by the aura explode (bigger blast) |
+| PING2 | Packets explode on impact (bigger, stronger blast) |
+| TREE2 | Branches stun every process they strike (longer stun) |
+| DEFRAG2 | Blocks pull nearby processes into the grinder (stronger pull) |
+| FORMAT2 | A second verify pass follows every format (stronger verify pass) |
+
+Your weapons and drivers carry over from C:\GAMES into D:\. Timed power-ups don't. There is no drive select: die on D:\ and the next run starts again on C:\GAMES. Your best run on each drive is saved in your browser's localStorage. The save belongs to one browser and one address, so a copy of the game at a different address starts with a fresh save.
 
 ### Weapons
 
