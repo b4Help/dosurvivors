@@ -1,6 +1,6 @@
 # DOSurvivors
 
-A horde-survival roguelite that looks like MS-DOS. You are the blinking cursor, enemies are ASCII characters, your weapons are DOS commands and your upgrades are punctuation. Survive 10 minutes, then terminate the boss. Beat it and the run continues on the second drive, `D:\`.
+A horde-survival roguelite that looks like MS-DOS. You are the blinking cursor, enemies are ASCII characters, your weapons are DOS commands and your upgrades are punctuation. Survive 10 minutes, then terminate the boss. Beat it and the run continues on `D:\`, then on the floppy `A:\`.
 
 > **Proof of concept.** DOSurvivors is a test project, not a finished game. Balance, features and content may change or stay rough, and bugs are expected.
 
@@ -38,7 +38,7 @@ Enemies swarm in from every side and your weapons fire on their own. Kills drop 
 
 ## Drives
 
-DOSurvivors has two drives, played in order as one run. Every run starts on **`C:\GAMES`**: survive 10 minutes and terminate **FATAL.EXE**. Beat it and the run continues on **`D:\`**, which is the same 10-minute shape with these changes:
+DOSurvivors has three drives, played in order as one run. Every run starts on **`C:\GAMES`**: survive 10 minutes and terminate **FATAL.EXE**. Beat it and the run continues on **`D:\`**, which is the same 10-minute shape with these changes:
 
 - **Walls.** Small solid blocks scattered across the field, at most one per area and never joined into corridors. You, enemies and bullets can't cross them, and your shots stop at them. Walls are random every run.
 - **New processes.** Trojan, keylogger and zip bomb (see below).
@@ -56,7 +56,22 @@ DOSurvivors has two drives, played in order as one run. Every run starts on **`C
 | DEFRAG2 | Blocks pull nearby processes into the grinder (stronger pull) |
 | FORMAT2 | A second verify pass follows every format (stronger verify pass) |
 
-Your weapons and drivers carry over from C:\GAMES into D:\. Timed power-ups don't. There is no drive select: die on D:\ and the next run starts again on C:\GAMES. Your best run on each drive is saved in your browser's localStorage. The save belongs to one browser and one address, so a copy of the game at a different address starts with a fresh save.
+Beat **CHKDSK.EXE** and the run continues on **`A:\`**, a floppy disk:
+
+- **A round arena.** The disk has an edge you can't cross, so there's nowhere to run.
+- **5x the processes.** Spawn rate and on-screen count are five times higher. XP per kill is lower to match.
+- **Bad sectors.** A new one appears every 22 seconds (up to 12). Standing in one drains 10 HP per second.
+- **New processes.** Disk swap (`S`) blinks right next to you, head crash (`H`) locks on and charges, write-protect tab (`T`) takes only 25% damage from projectiles.
+- **A new boss.** **FORMAT A:**, with 120000 HP. Bullet rings with a gap to slip through, aimed fans and head crash summons. Below half HP it adds a spiral and drops bad sectors where you stand.
+- **Super weapons.** A 7th weapon slot that holds one super weapon, offered on level-up:
+
+| Super weapon | What it does |
+|---|---|
+| DELTREE.EXE | Marks the densest swarm, then deletes the whole branch in one huge blast |
+| XCOPY.EXE | Spinning copy beams sweep around you |
+| FDISK.EXE | Partition lines sweep across the whole screen, hitting everything they cross |
+
+Your weapons and drivers carry over from each drive into the next. Timed power-ups don't. There is no drive select: die anywhere and the next run starts again on C:\GAMES. Your best run on each drive is saved in your browser's localStorage. The save belongs to one browser and one address, so a copy of the game at a different address starts with a fresh save.
 
 ### Weapons
 

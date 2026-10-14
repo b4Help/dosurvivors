@@ -30,6 +30,7 @@ body{font-family:VGA,'Courier New',monospace;font-size:var(--fs);line-height:1;c
 #crt{position:fixed;inset:0;pointer-events:none;z-index:50;background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.22) 3px,rgba(0,0,0,0) 4px)}
 #crt::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 62%,rgba(0,0,0,.55) 100%);animation:flick 5s infinite}
 #ver{position:fixed;right:8px;bottom:6px;z-index:11;display:none;color:#555555;pointer-events:none}
+#logo{position:fixed;right:8px;bottom:calc(6px + 1.25em);z-index:11;display:none;max-width:min(160px,30vw);max-height:120px}
 @keyframes flick{0%,100%{opacity:1}48%{opacity:.92}50%{opacity:1}74%{opacity:.96}}
 </style>
 </head>
@@ -42,7 +43,8 @@ body{font-family:VGA,'Courier New',monospace;font-size:var(--fs);line-height:1;c
 <div id="scr" class="scr"></div>
 <div id="ov"><div id="dlg" class="dlg"></div></div>
 <div id="crt"></div>
-<div id="ver">v0.4</div>
+<img id="logo" src="images/mekstudios_logo.png" alt="MEK Studios">
+<div id="ver">v0.5</div>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -107,6 +109,10 @@ const ET={
   'q':{name:'trojan',  c:C.brown,hp:40, spd:78,dmg:9, xp:3,r:5},
   'k':{name:'keylogger',c:C.mag,hp:70, spd:22,dmg:8, xp:4,r:5,shoot:{every:2.4,spd:110,dmg:9}},
   'Z':{name:'zip bomb',c:C.lblue,hp:120,spd:26,dmg:14,xp:6,r:7,burst:true},
+  // A:\ floppy (LEVEL 3)
+  'S':{name:'disk swap',c:C.lmag,hp:60,spd:30,dmg:12,xp:4,r:5,tele:{every:3.5}},
+  'H':{name:'head crash',c:C.lred,hp:90,spd:30,dmg:16,xp:5,r:6,charge:{every:3,time:.6,spd:230}},
+  'T':{name:'write-protect tab',c:C.lgray,hp:140,spd:24,dmg:14,xp:6,r:6,wp:true},
 };
 const WAVES=[
   {t:['x'],rate:1.0,cap:60},
@@ -133,6 +139,19 @@ const WAVES2=[
   {t:['k','W','q','Z'],rate:6.4,cap:340},
   {t:['W','%','q','k','Z'],rate:7.2,cap:380},
 ];
+// LEVEL 3 (A:\): 5x the spawn rate and on-screen cap of the base table below
+const WAVES3=[
+  {t:['S','q','x'],rate:1.6,cap:80},
+  {t:['S','H','0'],rate:2.2,cap:110},
+  {t:['T','H','q'],rate:2.8,cap:140},
+  {t:['S','k','T','@'],rate:3.3,cap:170},
+  {t:['H','Z','S'],rate:3.9,cap:200},
+  {t:['T','$','H','q'],rate:4.5,cap:230},
+  {t:['S','&','Z','H'],rate:5.2,cap:260},
+  {t:['T','%','H','k'],rate:5.9,cap:300},
+  {t:['W','S','H','T'],rate:6.6,cap:340},
+  {t:['W','%','T','H','S','Z'],rate:7.4,cap:380},
+].map(w=>({...w,rate:w.rate*5,cap:w.cap*5}));
 const MAXW=7;
 const b=(c)=>c?1:0;
 const WEAP={
@@ -215,6 +234,31 @@ for(const id of Object.keys(WEAP)){const bw=WEAP[id],x=V2X[id];
     st:l=>{const s={...bw.st(MAXW)},e=1+b(l>=2)+b(l>=5)+b(l>=7);
       const m=1.15+.15*b(l>=3)+.15*b(l>=6&&!x.n)+.3*b(l>=7),f=l>=4?.8:.9;
       if(s.dmg)s.dmg*=m;if(s.cd)s.cd*=f;if(s.tick)s.tick*=f;if(s.n&&l>=6)s.n++;return Object.assign(s,x.fx(e))}}}
+// super weapons (LEVEL 3 only): live in a 7th slot, one at a time, offered on level-up
+Object.assign(WEAP,{
+  DELTREE:{name:'DELTREE',file:'DELTREE.EXE',c:C.lred,super:true,
+    up:['Marks the densest swarm, then deletes the whole branch','+1 strike','+30% blast radius','+150 damage','-20% delay','+1 strike','+300 damage, +30% radius'],
+    st:l=>({n:1+b(l>=2)+b(l>=6),rad:70*(1+.3*b(l>=3)+.3*b(l>=7)),dmg:220+150*b(l>=4)+300*b(l>=7),cd:3.2*(l>=5?.8:1)}),
+    fire(w,s){const vis=S.enemies.filter(e=>!e.dead&&Math.abs(e.x-PL.x)<VW/2&&Math.abs(e.y-PL.y)<VH/2);if(!vis.length){w.t=.3;return}
+      for(let k=0;k<s.n+P.amount;k++){let best=null,bc=-1;
+        for(let i=0;i<10;i++){const c=pick(vis);let cnt=0;query(c.x,c.y,s.rad*.6,()=>cnt++);if(cnt>bc){bc=cnt;best=c}}
+        S.strikes.push({x:best.x,y:best.y,r:s.rad,dmg:s.dmg,t:.55,max:.55})}
+      beep(180,.2,.04,300,0,'deltree',200)}},
+  XCOPY:{name:'XCOPY',file:'XCOPY.EXE',c:C.lcyan,super:true,
+    up:['Spinning copy beams sweep around you','+1 beam','+25% length','+1 beam','+8 damage','+1 beam','+14 damage, +25% length, faster spin'],
+    st:l=>({n:3+b(l>=2)+b(l>=4)+b(l>=6),len:110*(1+.25*b(l>=3)+.25*b(l>=7)),dmg:16+8*b(l>=5)+14*b(l>=7),spin:1.4*(l>=7?1.3:1)}),
+    tick(w,s,dt){const n=s.n+P.amount,len=s.len*P.area;w.ang=((w.ang||0)+s.spin*P.pspd*dt)%TAU;w.beams=[];
+      for(let i=0;i<n;i++){const a=w.ang+i*TAU/n,c=Math.cos(a),si=Math.sin(a);w.beams.push({c,s:si,len});
+        for(let d=14;d<=len;d+=12)query(PL.x+c*d,PL.y+si*d,7,e=>{if((e.hits.xc??-9)+.25<=S.t){e.hits.xc=S.t;hurt(e,s.dmg,-si*40,c*40)}})}}},
+  FDISK:{name:'FDISK',file:'FDISK.EXE',c:C.lmag,super:true,
+    up:['Partition lines sweep across the whole screen','+1 partition','+35 damage','-20% delay','+50 damage','+1 partition','+90 damage, -15% delay'],
+    st:l=>({n:2+b(l>=2)+b(l>=6),dmg:70+35*b(l>=3)+50*b(l>=5)+90*b(l>=7),cd:4*(l>=4?.8:1)*(l>=7?.85:1)}),
+    fire(w,s){const n=s.n+P.amount;
+      for(let i=0;i<n;i++){const v=i%2===0,dir=Math.random()<.5?1:-1,half=(v?VW:VH)/2,c0=v?PL.x:PL.y;
+        S.sweeps.push({v,dir,pos:c0-dir*half,end:c0+dir*half,spd:half*2/.9,dmg:s.dmg,cx:PL.x,cy:PL.y,delay:i*.15,hit:new Set()})}
+      beep(240,.5,.04,-180,0,'fdisk',200)}},
+});
+const isSuper=id=>!!WEAP[id].super;
 const PASS={
   '!':{name:'EXCLAIM.SYS',desc:'+10% damage',max:5},
   ';':{name:'SEMICOL.SYS',desc:'-8% weapon delay',max:5},
@@ -232,7 +276,7 @@ const PASS={
 
 /* ---------- state ---------- */
 let state='boot',S=null,PL=null,P=null,T=0,eid=0,frameNo=0;
-const K={};
+const K={},KC={};// K: by key name, KC: by physical key code
 // local save: best run per drive. Every run starts on C:; beating a drive continues the same run
 // on the next one (see showWin/continueRun), so there is no drive picker.
 const SAVE_KEY='dosurv.save';
@@ -251,7 +295,7 @@ function recalc(){
 }
 function newGame(L,carry){
   S={lvl:L,walls:new Map(),t:0,kills:0,level:1,xp:0,xpNext:xpFor(1),pending:0,chestQ:[],props:[],chunks:new Set(),bytes:0,buffs:{turbo:0,freeze:0,shield:0},flash:0,seed:(Math.random()*1e6)|0,
-     enemies:[],projs:[],gems:[],picks:[],fx:[],texts:[],eb:[],rings:[],pools:[],lines:[],chains:[],booms:[],
+     enemies:[],projs:[],gems:[],picks:[],fx:[],texts:[],eb:[],rings:[],pools:[],lines:[],chains:[],booms:[],strikes:[],sweeps:[],bad:[],badT:20,
      weapons:[],passives:{},spawnAcc:0,nextElite:45,events:[150,330,510],boss:null,bossSpawned:false,warned:false,
      banner:null,shake:0,hurtFlash:0,winAt:0};
   PL={x:0,y:0,hp:100,maxHp:100,r:5,fx:1,fy:0,hx:1,inv:0};
@@ -289,7 +333,7 @@ function hitsWall(x,y,r){
   return false}
 // move by (dx,dy): full step, then rotated probes to get around corners, then axis slides
 function moveBody(o,dx,dy,r){
-  if(!S.walls.size){o.x+=dx;o.y+=dy;return}
+  if(!S.walls.size){o.x+=dx;o.y+=dy;if(S.lvl.arena)clampArena(o,r);return}
   for(const a of[0,.6,-.6,1.2,-1.2]){const c=Math.cos(a),s=Math.sin(a),ex=dx*c-dy*s,ey=dx*s+dy*c;
     if(!hitsWall(o.x+ex,o.y+ey,r)){o.x+=ex;o.y+=ey;return}}
   if(!hitsWall(o.x+dx,o.y,r))o.x+=dx;
@@ -299,10 +343,15 @@ function moveBody(o,dx,dy,r){
 function freeSpot(x,y,r){for(let k=0;k<24;k++){const a=k*2.4,d=k*10,nx=x+Math.cos(a)*d,ny=y+Math.sin(a)*d;if(!hitsWall(nx,ny,r))return[nx,ny]}return[x,y]}
 
 /* ---------- spawning ---------- */
-function ringPos(){const a=Math.random()*TAU,r=Math.hypot(VW,VH)/2+20;return freeSpot(PL.x+Math.cos(a)*r,PL.y+Math.sin(a)*r,6)}
+function ringPos(){const R=S.lvl.arena,r=Math.hypot(VW,VH)/2+20;
+  for(let k=0;k<8;k++){const a=Math.random()*TAU,x=PL.x+Math.cos(a)*r,y=PL.y+Math.sin(a)*r;if(!R||Math.hypot(x,y)<R-12)return freeSpot(x,y,6)}
+  // near the floppy's edge there is no room off-screen: come in from the far side of the disk
+  const a=Math.atan2(-PL.y,-PL.x)+rand(-.8,.8),d=rand(.5,.95)*R;return[Math.cos(a)*d,Math.sin(a)*d]}
 function spawnEnemy(ch,o={}){
   const d=ET[ch];const [x,y]=o.x!=null?[o.x,o.y]:ringPos();if(hitsWall(x,y,d.r))return null;const hm=1+S.t/60*.15;
-  const e={id:eid++,ch,x,y,c:d.c,hp:d.hp*hm,spd:d.spd*rand(.9,1.1),dmg:d.dmg,xp:d.xp,r:d.r,kx:0,ky:0,flash:0,hits:{},q:0,burst:!!d.burst,shoot:d.shoot,sct:rand(.5,2)};
+  const e={id:eid++,ch,x,y,c:d.c,hp:d.hp*hm,spd:d.spd*rand(.9,1.1),dmg:d.dmg,xp:d.xp,r:d.r,kx:0,ky:0,flash:0,hits:{},q:0,burst:!!d.burst,shoot:d.shoot,sct:rand(.5,2),
+    charge:d.charge,tele:d.tele,wp:!!d.wp,ct:rand(1,3)};
+  if(S.lvl.arena)clampArena(e,e.r);
   if(o.elite){e.elite=true;e.hp*=14;e.r=d.r*2;e.dmg*=1.6;e.xp*=10;e.spd*=.9}
   e.maxHp=e.hp;S.enemies.push(e);return e;
 }
@@ -324,9 +373,12 @@ function spawning(dt){
 const BOSS_ART=['╔═════════════╗','║ ▄███▄ ▄███▄ ║','║ █ o █ █ o █ ║','║ ▀███▀ ▀███▀ ║','║      ▲      ║','║ ╔═╦═╦═╦═╦═╗ ║','║ ╚═╩═╩═╩═╩═╝ ║','╚══╦═══════╦══╝','   ║ FAIL? ║   ','   ╚═══════╝   '];
 const artRow=s=>'║'+s.padEnd(13)+'║';
 const BOSS2_ART=['╔'+'═'.repeat(13)+'╗',artRow(' CHKDSK.EXE'),artRow(' ▓▓▓▓▓▓▓▓▓'),artRow(' ▓ ■   ■ ▓'),artRow(' ▓   ▲   ▓'),artRow(' ▓ ═════ ▓'),artRow(' ▓▓▓▓▓▓▓▓▓'),'╚'+'═'.repeat(13)+'╝'];
+const BOSS3_ART=['╔'+'═'.repeat(13)+'╗',artRow(' ┌─────────┐'),artRow(' │ ■     ■ │'),artRow(' │    ▲    │'),artRow(' └─────────┘'),artRow('  ▓▓▓▓▓▓▓▓▓'),artRow('  ▓▓ A:\\ ▓▓'),'╚'+'═'.repeat(13)+'╝'];
+// arena: radius of the round floppy you can't leave; xpm: XP multiplier per kill (A:\ has 5x the enemies)
 const LEVELS=[
-  {id:1,drive:'C:',dir:'\\GAMES',dur:600,boss:'FATAL.EXE',bossHp:30000,bossArt:BOSS_ART,bossV2:false,waves:WAVES,walls:false,v2:false},
-  {id:2,drive:'D:',dir:'\\',dur:600,boss:'CHKDSK.EXE',bossHp:45000,bossArt:BOSS2_ART,bossV2:true,waves:WAVES2,walls:true,v2:true},
+  {id:1,drive:'C:',dir:'\\GAMES',dur:600,boss:'FATAL.EXE',bossHp:30000,bossArt:BOSS_ART,ai:1,waves:WAVES,walls:false,v2:false},
+  {id:2,drive:'D:',dir:'\\',dur:600,boss:'CHKDSK.EXE',bossHp:45000,bossArt:BOSS2_ART,ai:2,waves:WAVES2,walls:true,v2:true},
+  {id:3,drive:'A:',dir:'\\',dur:600,boss:'FORMAT A:',bossHp:120000,bossArt:BOSS3_ART,ai:3,waves:WAVES3,walls:false,v2:true,super:true,arena:900,xpm:.3},
 ];
 function spawnBoss(){
   S.bossSpawned=true;
@@ -334,13 +386,14 @@ function spawnBoss(){
   S.enemies=[];S.eb=[];
   const L=S.lvl;banner('Terminate batch job (Y/N)? Y',C.white,2.5);
   const [bx,by]=freeSpot(PL.x,PL.y-VH*.45,24);
-  const bs={id:eid++,boss:true,v2:L.bossV2,name:L.boss,art:L.bossArt,ch:'',x:bx,y:by,hp:L.bossHp,maxHp:L.bossHp,r:50,spd:24,dmg:30,xp:0,kx:0,ky:0,flash:0,hits:{},q:0,t1:3,t2:0,t3:6,t4:4.5,spin:0,ph2:false};
+  const bs={id:eid++,boss:true,ai:L.ai,name:L.boss,art:L.bossArt,ch:'',x:bx,y:by,hp:L.bossHp,maxHp:L.bossHp,r:50,spd:24,dmg:30,xp:0,kx:0,ky:0,flash:0,hits:{},q:0,t1:3,t2:0,t3:6,t4:4.5,spin:0,ph2:false};
   S.enemies.push(bs);S.boss=bs;
   for(let i=0;i<6;i++)beep(i%2?110:82,.3,.06,0,i*.32);
 }
-function eShoot(x,y,a,spd,ch,c,dmg){S.eb.push({x,y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,ch,c,dmg,life:7})}
+function eShoot(x,y,a,spd,ch,c,dmg){if(S.eb.length<800)S.eb.push({x,y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,ch,c,dmg,life:7})}
 function bossUpdate(bs,dt){
-  if(bs.v2)return bossUpdate2(bs,dt);
+  if(bs.ai===2)return bossUpdate2(bs,dt);
+  if(bs.ai===3)return bossUpdate3(bs,dt);
   const ph2=bs.hp<bs.maxHp*.5;
   if(ph2&&!bs.ph2){bs.ph2=true;banner(bs.name+': Abort, Retry, Fail?',C.lred,3);S.shake=8;arp([330,262,196,131],.12,.05)}
   const dx=PL.x-bs.x,dy=PL.y-bs.y,d=Math.hypot(dx,dy)||1,sp=ph2?34:24;
@@ -363,6 +416,28 @@ function bossUpdate2(bs,dt){
   bs.t3-=dt;if(bs.t3<=0){bs.t3=ph2?4:6;for(let i=0;i<4;i++){const a=i/4*TAU+Math.random();spawnEnemy('q',{x:bs.x+Math.cos(a)*80,y:bs.y+Math.sin(a)*80})}}
 }
 
+// LEVEL 3 boss (FORMAT A:): bullet rings with a gap to slip through, aimed fans, head crash summons;
+// below half HP a 3-arm spiral and bad sectors dropped where you stand
+function bossUpdate3(bs,dt){
+  const ph2=bs.hp<bs.maxHp*.5;
+  if(ph2&&!bs.ph2){bs.ph2=true;banner(bs.name+' Proceed with Format (Y/N)? Y',C.lred,3);S.shake=8;arp([330,262,196,131],.12,.05)}
+  const dx=PL.x-bs.x,dy=PL.y-bs.y,d=Math.hypot(dx,dy)||1,sp=ph2?32:22;
+  moveBody(bs,dx/d*sp*dt,dy/d*sp*dt,24);
+  bs.t1-=dt;if(bs.t1<=0){bs.t1=ph2?1.9:2.8;const n=34,gap=Math.random()*TAU;for(let i=4;i<n;i++)eShoot(bs.x,bs.y,gap+i/n*TAU,58,'▒',C.lgray,13);beep(150,.2,.04,-60)}
+  if(ph2){bs.t2-=dt;if(bs.t2<=0){bs.t2=.1;bs.spin+=.37;for(let k=0;k<3;k++)eShoot(bs.x,bs.y,bs.spin+k*TAU/3,78,'•',C.yellow,10)}
+    bs.t5=(bs.t5??3)-dt;if(bs.t5<=0){bs.t5=6;addBad(PL.x,PL.y,50,1.2,10)}}
+  bs.t4-=dt;if(bs.t4<=0){bs.t4=ph2?1.6:2.4;const a=Math.atan2(dy,dx);for(let k=-3;k<=3;k++)eShoot(bs.x,bs.y,a+k*.1,125,'■',C.lred,14)}
+  bs.t3-=dt;if(bs.t3<=0){bs.t3=ph2?4.5:6;for(let i=0;i<6;i++){const a=i/6*TAU;spawnEnemy('H',{x:bs.x+Math.cos(a)*80,y:bs.y+Math.sin(a)*80})}}
+}
+
+/* ---------- floppy (LEVEL 3): round arena + bad sectors ---------- */
+function clampArena(o,r){const m=S.lvl.arena-r-2,d=Math.hypot(o.x,o.y);if(d>m){o.x*=m/d;o.y*=m/d}}
+const okSpot=(x,y)=>!wallAt(x,y)&&(!S.lvl.arena||Math.hypot(x,y)<S.lvl.arena-16);
+// bad sector: drains HP while you stand in it; harmless during its blinking warm-up
+function addBad(x,y,r,warm=2,life=Infinity){const R=S.lvl.arena;
+  if(x==null)for(let k=0;k<10;k++){const a=Math.random()*TAU,d=Math.sqrt(Math.random())*(R-60);x=Math.cos(a)*d;y=Math.sin(a)*d;if(Math.hypot(x-PL.x,y-PL.y)>140)break}
+  S.bad.push({x,y,r:r??(40+S.t/600*40),warm,life})}
+
 /* ---------- combat ---------- */
 // v2 explosion: queued here, damage lands in update() so it never runs inside another query()
 function boom(x,y,r,dmg,c){if(S.booms.length<60)S.booms.push({x,y,r:r*P.area,dmg,c,life:.3,max:.3,done:false})}
@@ -380,7 +455,7 @@ function kill(e){
   S.fx.push({x:e.x,y:e.y,c:e.c,life:.3,max:.3,big:!!e.elite});
   if(e.boss){bossDead(e);return}
   if(e.burst)for(let i=0;i<10;i++)eShoot(e.x,e.y,i/10*TAU+.2,70,'*',C.lblue,10);
-  dropGem(e.x,e.y,e.xp);
+  dropGem(e.x,e.y,e.xp*(S.lvl.xpm||1));
   if(e.elite){S.picks.push({x:e.x,y:e.y,k:'zip'});beep(160,.25,.04,-100)}
   else{const r=Math.random();if(r<.008)S.picks.push({x:e.x,y:e.y,k:'heart'});else if(r<.011)S.picks.push({x:e.x,y:e.y,k:'magnet'});else if(r<.04)S.picks.push({x:e.x,y:e.y,k:'bytes',v:5+((Math.random()*10)|0)})}
 }
@@ -432,9 +507,9 @@ function update(dt){
         while(da>Math.PI)da-=TAU;while(da<-Math.PI)da+=TAU;const na=ca+Math.max(-7*dt,Math.min(7*dt,da));p.vx=Math.cos(na)*v;p.vy=Math.sin(na)*v}
     }
     p.x+=p.vx*dt;p.y+=p.vy*dt;p.life-=dt;
-    if(p.life<=0||wallAt(p.x,p.y)){p.dead=true;continue}
+    if(p.life<=0||wallAt(p.x,p.y)||(S.lvl.arena&&p.x*p.x+p.y*p.y>S.lvl.arena**2)){p.dead=true;continue}
     query(p.x,p.y,p.r,e=>{if(p.dead||p.hit.has(e))return;p.hit.add(e);const v=Math.hypot(p.vx,p.vy)||1;
-      hurt(e,p.dmg,p.vx/v*p.kb,p.vy/v*p.kb);if(p.tgt===e)p.tgt=null;if(--p.pierce<=0)p.dead=true;
+      hurt(e,e.wp?p.dmg*.25:p.dmg,p.vx/v*p.kb,p.vy/v*p.kb);if(p.tgt===e)p.tgt=null;if(--p.pierce<=0)p.dead=true;
       if(p.blast)boom(p.x,p.y,p.blast.r,p.dmg*p.blast.f,C.lgreen);
       if(p.shard){const a0=Math.atan2(p.vy,p.vx);for(let i=0;i<p.shard.n;i++)shoot(e.x,e.y,a0+(i-(p.shard.n-1)/2)*.7,170*P.pspd,{dmg:p.dmg*p.shard.f,pierce:1,s:'·',c:C.white,r:4,life:.45,kb:15,hit:new Set([e])})}});
   }
@@ -456,6 +531,21 @@ function update(dt){
 
   // v2 explosions
   for(const b of S.booms){if(b.done)continue;b.done=true;query(b.x,b.y,b.r,e=>{const dx=e.x-b.x,dy=e.y-b.y,d=Math.hypot(dx,dy)||1;hurt(e,b.dmg,dx/d*40,dy/d*40)})}
+  // DELTREE strikes go off after their warning
+  for(const st of S.strikes){st.t-=dt;if(st.t<=0){st.dead=true;boom(st.x,st.y,st.r,st.dmg,C.lred);S.shake=Math.max(S.shake,6);beep(60,.4,.05,-30,0,'dtboom',90)}}
+  S.strikes=S.strikes.filter(st=>!st.dead);
+  // FDISK partitions sweep across the view they were cast in, hitting each process once
+  for(const sw of S.sweeps){if(sw.delay>0){sw.delay-=dt;continue}sw.pos+=sw.dir*sw.spd*dt;const span=(sw.v?VH:VW)/2+20;
+    for(const e of S.enemies){if(e.dead||sw.hit.has(e))continue;
+      if(Math.abs((sw.v?e.x:e.y)-sw.pos)<=8+e.r&&Math.abs(sw.v?e.y-sw.cy:e.x-sw.cx)<=span){sw.hit.add(e);hurt(e,sw.dmg,sw.v?sw.dir*80:0,sw.v?0:sw.dir*80)}}
+    if((sw.pos-sw.end)*sw.dir>=0)sw.dead=true}
+  S.sweeps=S.sweeps.filter(sw=>!sw.dead);
+  // A:\ bad sectors: a new one every 22s until the boss, up to 12; standing in one drains 10 HP/s
+  if(S.lvl.arena){
+    if(!S.bossSpawned&&(S.badT-=dt)<=0){S.badT=22;if(S.bad.filter(b=>b.life===Infinity).length<12)addBad()}
+    for(const b of S.bad){b.warm-=dt;b.life-=dt;
+      if(b.warm<=0&&!S.winAt&&S.buffs.shield<=0&&(PL.x-b.x)**2+(PL.y-b.y)**2<b.r*b.r){PL.hp-=10*dt;S.hurtFlash=Math.max(S.hurtFlash,.08)}}
+    S.bad=S.bad.filter(b=>b.life>0)}
   // TYPE2: burned-in lines keep hurting what stands on them
   for(const l of S.lines){if(!l.burn)continue;l.bt-=dt;if(l.bt>0)continue;l.bt=.3;
     query((l.mn+l.mx)/2,l.y,(l.mx-l.mn)/2,e=>{if(e.x+e.r>=l.mn&&e.x-e.r<=l.mx&&Math.abs(e.y-l.y)<=8+e.r)hurt(e,l.burn)})}
@@ -470,7 +560,13 @@ function update(dt){
     else{
       const dx=PL.x-e.x,dy=PL.y-e.y,d=Math.hypot(dx,dy)||1;
       if(d>far&&!e.elite){const [x,y]=ringPos();e.x=x;e.y=y;continue}
-      moveBody(e,(dx/d*e.spd+e.kx)*dt,(dy/d*e.spd+e.ky)*dt,e.r);
+      if(e.dash>0){e.dash-=dt;moveBody(e,(e.dvx+e.kx)*dt,(e.dvy+e.ky)*dt,e.r)}
+      else moveBody(e,(dx/d*e.spd+e.kx)*dt,(dy/d*e.spd+e.ky)*dt,e.r);
+      // head crash: locks on and charges in a straight line
+      if(e.charge&&(e.ct-=dt)<=0){e.ct=e.charge.every;e.dash=e.charge.time;e.dvx=dx/d*e.charge.spd;e.dvy=dy/d*e.charge.spd}
+      // disk swap: blinks to a spot close to you
+      if(e.tele&&(e.ct-=dt)<=0){e.ct=e.tele.every;S.fx.push({x:e.x,y:e.y,c:e.c,life:.3,max:.3});
+        const a=Math.random()*TAU,r=rand(50,80);[e.x,e.y]=freeSpot(PL.x+Math.cos(a)*r,PL.y+Math.sin(a)*r,e.r);if(S.lvl.arena)clampArena(e,e.r)}
       if(e.shoot&&(e.sct-=dt)<=0){e.sct=e.shoot.every;eShoot(e.x,e.y,Math.atan2(dy,dx),e.shoot.spd,'°',C.mag,e.shoot.dmg)}
       const dec=Math.min(1,10*dt);e.kx-=e.kx*dec;e.ky-=e.ky*dec;
       if(((e.id+frameNo)&1)===0)query(e.x,e.y,e.r,o=>{if(o===e||o.boss)return;let sx=e.x-o.x,sy=e.y-o.y,dd=Math.hypot(sx,sy);
@@ -483,7 +579,7 @@ function update(dt){
   S.enemies=S.enemies.filter(e=>!e.dead);
 
   // enemy bullets
-  for(const q of S.eb){q.x+=q.vx*dt;q.y+=q.vy*dt;q.life-=dt;if(wallAt(q.x,q.y))q.life=0;
+  for(const q of S.eb){q.x+=q.vx*dt;q.y+=q.vy*dt;q.life-=dt;if(wallAt(q.x,q.y)||(S.lvl.arena&&q.x*q.x+q.y*q.y>S.lvl.arena**2))q.life=0;
     if((q.x-PL.x)**2+(q.y-PL.y)**2<(PL.r+4)**2){hitPlayer(q.dmg);q.life=0}}
   S.eb=S.eb.filter(q=>q.life>0);
 
@@ -537,10 +633,10 @@ function genChunk(cx,cy){
   }
   // field items never spawn inside a wall
   const n=(r(1)<.3?1:0)+(r(2)<.15?1:0)+(r(3)<.05?1:0);
-  for(let i=0;i<n;i++){const [x,y]=at(10+i);if(!wallAt(x,y))S.props.push({k:'tmp',x,y})}
-  if(r(4)<.065){const [x,y]=at(20);if(!wallAt(x,y))S.props.push({k:'buried',x,y,prog:0,tick:0})}
-  if(r(5)<.025){const [x,y]=at(30);if(!wallAt(x,y))S.picks.push({x,y,k:POWK[(r(31)*POWK.length)|0]})}
-  if(r(6)<.09){const [x,y]=at(40);for(let i=0;i<5;i++){const px=x+Math.cos(i/5*TAU)*10,py=y+Math.sin(i/5*TAU)*10;if(!wallAt(px,py))S.picks.push({x:px,y:py,k:'bytes',v:10})}}
+  for(let i=0;i<n;i++){const [x,y]=at(10+i);if(okSpot(x,y))S.props.push({k:'tmp',x,y})}
+  if(r(4)<.065){const [x,y]=at(20);if(okSpot(x,y))S.props.push({k:'buried',x,y,prog:0,tick:0})}
+  if(r(5)<.025){const [x,y]=at(30);if(okSpot(x,y))S.picks.push({x,y,k:POWK[(r(31)*POWK.length)|0]})}
+  if(r(6)<.09){const [x,y]=at(40);for(let i=0;i<5;i++){const px=x+Math.cos(i/5*TAU)*10,py=y+Math.sin(i/5*TAU)*10;if(okSpot(px,py))S.picks.push({x:px,y:py,k:'bytes',v:10})}}
 }
 function collect(p){
   switch(p.k){
@@ -626,6 +722,13 @@ function render(){
   if(S.walls.size)for(let gx=Math.floor(camX/32);gx<=Math.floor((camX+VW)/32);gx++)for(let gy=Math.floor(camY/32);gy<=Math.floor((camY+VH)/32);gy++)
     if(S.walls.has(gk(gx,gy)))for(let i=0;i<4;i++)for(let j=0;j<2;j++)txt('▓',gx*32+4+i*8,gy*32+8+j*16,C.cyan);
 
+  // A:\ disk edge and bad sectors
+  if(S.lvl.arena){const R=S.lvl.arena,n=(TAU*R/8)|0;
+    for(let i=0;i<n;i++){const a=i/n*TAU,x=Math.cos(a)*R,y=Math.sin(a)*R;if(Math.abs(x-PL.x)>VW/2+10||Math.abs(y-PL.y)>VH/2+10)continue;txt('█',x,y,C.dgray)}
+    for(const b of S.bad){if(Math.abs(b.x-PL.x)>VW/2+b.r||Math.abs(b.y-PL.y)>VH/2+b.r)continue;const live=b.warm<=0;if(!live&&T%.3<.15)continue;
+      for(let y=-b.r;y<=b.r;y+=16)for(let x=-b.r;x<=b.r;x+=8){if(x*x+y*y>b.r*b.r)continue;const h=hash(Math.round((b.x+x)/8),Math.round((b.y+y)/16)+Math.floor(T*3));
+        txt(h<.5?'░':'▒',b.x+x,b.y+y,live?(h<.3?C.lred:C.red):C.dgray)}}}
+
   // defrag pools
   for(const p of S.pools){ctx.globalAlpha=Math.min(1,p.life/.4)*.85;
     const step=Math.floor(T*6);
@@ -667,6 +770,16 @@ function render(){
   ctx.globalAlpha=1;
   const fr=S.rings.filter(g=>!(g.delay>0));
   if(fr.length){const g=fr[fr.length-1];txt((g.c===C.lcyan?'Verifying... ':'Formatting... ')+Math.min(100,Math.round(g.r/g.max*100))+'%',PL.x,PL.y-22,C.lgray)}
+
+  // DELTREE target markers
+  for(const st of S.strikes){if(T%.16<.08)continue;const r=st.r*P.area,n=Math.max(12,(TAU*r/12)|0);
+    for(let i=0;i<n;i++){const a=i/n*TAU;txt('x',st.x+Math.cos(a)*r,st.y+Math.sin(a)*r,C.lred)}txt('DELTREE',st.x,st.y,C.white)}
+  // FDISK partitions
+  for(const sw of S.sweeps){if(sw.delay>0)continue;const c=T%.12<.06?C.lmag:C.white;
+    if(sw.v)for(let y=sw.cy-VH/2;y<=sw.cy+VH/2;y+=16)txt('║',sw.pos,y,c);else for(let x=sw.cx-VW/2;x<=sw.cx+VW/2;x+=8)txt('═',x,sw.pos,c)}
+  // XCOPY beams
+  const xc=S.weapons.find(w=>w.id==='XCOPY');
+  if(xc&&xc.beams)for(const bm of xc.beams){const ch=chainChar(bm.c,bm.s);for(let d=14;d<=bm.len;d+=8)txt(ch,PL.x+bm.c*d,PL.y+bm.s*d,((T*20+d/8)|0)%3?C.lcyan:C.white)}
 
   // v2 explosions: a ring of shade characters that grows to the blast radius
   for(const b of S.booms){const k=1-b.life/b.max,r=Math.max(3,b.r*Math.min(1,k*1.6)),n=Math.max(6,(TAU*r/8)|0);ctx.globalAlpha=Math.min(1,b.life/b.max*1.5);
@@ -806,12 +919,13 @@ function box(title,rows,w){
   return out.join('\n');
 }
 function choices(n,ownedOnly){
-  const pool=[];
-  for(const id in WEAP){const d=WEAP[id];if(d.v2&&!S.lvl.v2)continue;const w=S.weapons.find(w=>w.id===id);
+  const pool=[],nw=S.weapons.filter(x=>!isSuper(x.id)).length,hasSuper=S.weapons.some(x=>isSuper(x.id));
+  for(const id in WEAP){const d=WEAP[id];if(d.v2&&!S.lvl.v2||d.super&&!S.lvl.super)continue;const w=S.weapons.find(w=>w.id===id);
     if(w){if(w.lv<MAXW)pool.push({k:'w',id,lv:w.lv+1,wt:1.3})}
     else if(d.v2){// a v2 needs its base weapon maxed; it replaces it in the same slot and starts at level 1
       const base=S.weapons.find(x=>x.id===d.base);if(base&&base.lv>=MAXW)pool.push({k:'w',id,lv:1,up:d.base,wt:1.6})}
-    else if(!ownedOnly&&S.weapons.length<6&&!S.weapons.some(x=>baseOf(x.id)===id))pool.push({k:'w',id,lv:1,wt:1})}// not if its v2 is owned
+    else if(d.super){if(!ownedOnly&&!hasSuper)pool.push({k:'w',id,lv:1,wt:1.4})}// one super weapon, in the 7th slot
+    else if(!ownedOnly&&nw<6&&!S.weapons.some(x=>baseOf(x.id)===id))pool.push({k:'w',id,lv:1,wt:1})}// not if its v2 is owned
   const np=Object.keys(S.passives).length;
   for(const id in PASS){const l=lv(id);
     if(l>0){if(l<PASS[id].max)pool.push({k:'p',id,lv:l+1,wt:1.1})}else if(!ownedOnly&&np<6)pool.push({k:'p',id,lv:1,wt:.8})}
@@ -821,7 +935,7 @@ function choices(n,ownedOnly){
   return out;
 }
 function optInfo(o){
-  const tag=o.up?'UPGRADE':o.lv===1?'NEW':`LV ${o.lv-1}>${o.lv}`;
+  const tag=o.up?'UPGRADE':o.lv===1?(o.k==='w'&&isSuper(o.id)?'SUPER':'NEW'):`LV ${o.lv-1}>${o.lv}`;
   if(o.k==='w'){const d=WEAP[o.id];return{head:S.lvl.drive+'\\>'+d.name,file:d.file,tag,desc:d.up[o.lv-1]}}
   if(o.k==='p'){const d=PASS[o.id];return{head:'[ '+o.id+' ]',file:d.name,tag,desc:d.desc}}
   return{head:'[ ♥ ]',file:'MEM.EXE',tag:'',desc:'Free conventional memory: restore 40 HP'};
@@ -865,7 +979,8 @@ function openPause(){
   state='pause';
   const rows=['Program paused. Installed components:','',{sep:1},{t:'WEAPONS',cls:'hl'}];
   for(const w of S.weapons)rows.push(`${S.lvl.drive}\\>${w.id.padEnd(8)} ${WEAP[w.id].file.padEnd(12)} ${'█'.repeat(w.lv)}${'░'.repeat(MAXW-w.lv)}`);
-  for(let i=S.weapons.length;i<6;i++)rows.push({t:'(empty slot)',cls:'dim'});
+  for(let i=S.weapons.filter(w=>!isSuper(w.id)).length;i<6;i++)rows.push({t:'(empty slot)',cls:'dim'});
+  if(S.lvl.super&&!S.weapons.some(w=>isSuper(w.id)))rows.push({t:'(empty super slot)',cls:'dim'});
   rows.push({t:'DRIVERS',cls:'hl'});
   const pk=Object.keys(S.passives);
   for(const k of pk)rows.push(`[ ${k} ]    ${PASS[k].name.padEnd(12)} ${'█'.repeat(S.passives[k])}${'░'.repeat(PASS[k].max-S.passives[k])}`+(narrow()?'':`  ${PASS[k].desc}`));
@@ -917,7 +1032,7 @@ function showTitle(){
   for(const lv of LEVELS){const bst=SAVE.best[lv.id];if(bst)L.push(`<span class="dim">${esc(center(`${(lv.drive+lv.dir).padEnd(9)} BEST ${fmt(bst.time)}   KILLS ${String(bst.kills).padEnd(6)} WINS ${bst.wins}`))}</span>`)}
   if(isTouch)L.push('',`<span class="dim">${esc(center('Touchscreen detected: use the stick in the bottom corner to move'))}</span>`);
   L.push('','');
-  const leg='x 0 E @ # $ & % W q k Z   are hostile processes';
+  const leg='x 0 E @ # $ & % W q k Z S H T   are hostile processes';
   L.push([...center(leg)].map((c,i,a)=>ET[c]&&a[i+1]===' '?`<span style="color:${ET[c].c}">${esc(c)}</span>`:esc(c)).join(''));
   L.push(`<span class="cy">${esc(center('+ is XP        ♥ heals        [ZIP] is an archive        Ω pulls all XP'))}</span>`);
   L.push(`<span class="yl">${esc(center('[≡] .TMP files hide loot     ░▒░ buried treasure     ♦ bytes'))}</span>`);
@@ -946,7 +1061,7 @@ function helpPages(){
       D('  You are the blinking cursor. Processes swarm in from every side.'),
       D('  Your weapons fire on their own. Move, collect XP, get stronger.'),
       D('  Survive 10:00, then terminate the boss FATAL.EXE to win.'),
-      D('  Beat it and the run continues on the second drive, D:\\.'),'',
+      D('  Beat it and the run continues on D:\\, then on the floppy A:\\.'),'',
       H('CONTROLS'),...ctl,'',
       H('LEVEL UP'),
       D('  The game pauses and SETUP.EXE offers 3 choices: a new weapon,'),
@@ -958,7 +1073,7 @@ function helpPages(){
       D('  Weapons are DOS commands and fire automatically.'),
       D('  You start with DIR. Hold up to 6, each upgrades to level 7.'),
       D('  On D:\\ a maxed weapon can become its v2 (see D:\\ DRIVE).'),'',
-      ...Object.keys(WEAP).filter(id=>!WEAP[id].v2).map(id=>'  '+sp('wh',('C:\\>'+WEAP[id].name).padEnd(13))+sp('dg',WEAP[id].file.padEnd(12))+D(WEAP[id].up[0]))]},
+      ...Object.keys(WEAP).filter(id=>!WEAP[id].v2&&!WEAP[id].super).map(id=>'  '+sp('wh',('C:\\>'+WEAP[id].name).padEnd(13))+sp('dg',WEAP[id].file.padEnd(12))+D(WEAP[id].up[0]))]},
     {t:'DRIVERS',l:[
       D('  Drivers are punctuation upgrades that boost everything.'),
       D('  Hold up to 6. Each goes to level 5 (COLON.SYS: level 2).'),
@@ -1010,6 +1125,25 @@ function helpPages(){
       D('  It replaces the base weapon, starts again at level 1 and adds'),
       D('  its own effect that grows as it levels:'),
       ...Object.keys(V2X).map(id=>'  '+sp('wh',(id+'2').padEnd(9))+D(V2X[id].desc))]},
+    {t:'A:\\ DRIVE',l:[
+      H('GETTING THERE'),
+      D('  Beat CHKDSK.EXE on D:\\ and the run continues on A:\\.'),
+      D('  Die here and the next run starts again on C:\\GAMES.'),'',
+      H('THE FLOPPY'),
+      D('  A:\\ is a round disk with an edge you cannot cross.'),
+      D('  Processes come at 5x the numbers; XP per kill is lower to match.'),
+      row('░▒','Bad sector','appears every 22s, drains 10 HP/s while you stand in it',C.lred),'',
+      H('NEW PROCESSES'),
+      row('S','disk swap','blinks to a spot right next to you',C.lmag),
+      row('H','head crash','locks on and charges in a straight line',C.lred),
+      row('T','write-protect','projectiles do 25% damage to it',C.lgray),'',
+      H('SUPER WEAPONS'),
+      D('  A 7th slot that holds one super weapon, offered on level-up.'),
+      ...['DELTREE','XCOPY','FDISK'].map(id=>'  '+sp('wh',('A:\\>'+id).padEnd(13))+sp('dg',WEAP[id].file.padEnd(12))+D(WEAP[id].up[0])),'',
+      H('BOSS'),
+      D('  FORMAT A:, 120000 HP. Bullet rings with a gap, aimed fans and'),
+      D('  head crash summons. Below half HP: a spiral, and bad sectors'),
+      D('  dropped where you stand.')]},
   ];
 }
 function showHelp(page){
@@ -1051,6 +1185,11 @@ function showWin(){
   showScr(L.join('\n'));
 }
 function startGame(L=LEVELS[0],carry=null){touch=null;newGame(L,carry);hideScr();$('ov').style.display='none';state='play';last=performance.now()}
+// test shortcut: hold Left Shift + M and click the logo on the title screen to start A:\ maxed out
+function startTestRun(){
+  const weapons=['DIR2','PING2','TREE2','FORMAT2','DEL2','COPY2'].map(id=>({id,lv:MAXW}));
+  startGame(LEVELS[2],{weapons,passives:{'!':5,';':5,'_':5,':':2,'.':5}})}
+$('logo').addEventListener('click',e=>{e.stopPropagation();if(state==='title'&&KC.ShiftLeft&&KC.KeyM)startTestRun()});
 function continueRun(){const r=nextRun;nextRun=null;if(r)startGame(r.lvl,r.carry);else showTitle()}
 
 /* ---------- boot ---------- */
@@ -1072,8 +1211,8 @@ addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if([' ','arrowup','arrowdown','arrowleft','arrowright','tab'].includes(k))e.preventDefault();
   if(e.repeat&&!['w','s','arrowup','arrowdown'].includes(k))return;
-  K[k]=true;
-  if(k==='m'){muted=!muted;lastHud={};if(state==='title'){showTitle();return}}
+  K[k]=true;KC[e.code]=true;
+  if(k==='m'&&!KC.ShiftLeft){muted=!muted;lastHud={};if(state==='title'){showTitle();return}}
   switch(state){
     case'boot':skipBoot();break;
     case'title':if(k==='enter'||k===' ')startGame();else if(k==='h')showHelp(0);break;
@@ -1090,8 +1229,8 @@ addEventListener('keydown',e=>{
     case'win':if(k==='enter'||k===' ')continueRun();break;
   }
 });
-addEventListener('keyup',e=>{K[e.key.toLowerCase()]=false});
-addEventListener('blur',()=>{for(const k in K)K[k]=false;if(state==='play')openPause()});
+addEventListener('keyup',e=>{K[e.key.toLowerCase()]=false;KC[e.code]=false});
+addEventListener('blur',()=>{for(const k in K)K[k]=false;for(const k in KC)KC[k]=false;if(state==='play')openPause()});
 $('scr').addEventListener('click',e=>{
   const a=e.target.closest('[data-act]'),act=a&&a.dataset.act;
   if(state==='boot')skipBoot();
@@ -1124,7 +1263,7 @@ function frame(now){
   if(S&&['play','levelup','chest','pause'].includes(state))render();
   else if(state!=='dead'&&state!=='win'){ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#000';ctx.fillRect(0,0,cv.width,cv.height)}
   updateHud();
-  $('ver').style.display=state==='title'?'block':'none';
+  $('ver').style.display=$('logo').style.display=state==='title'?'block':'none';
   requestAnimationFrame(frame);
 }
 resize();
